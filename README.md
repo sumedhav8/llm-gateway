@@ -22,3 +22,4 @@ Python, FastAPI, Ollama (local model), Postgres + pgvector, scikit-learn, Stream
     python -m venv .venv
     .venv\Scripts\activate
     pip install -r requirements.txt
+    copy .env.example .env
