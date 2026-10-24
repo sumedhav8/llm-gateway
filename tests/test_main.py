@@ -1,4 +1,5 @@
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
@@ -6,7 +7,15 @@ from app import main
 client = TestClient(main.app)
 
 
-# --- Day 4 tests ---------------------------------------------------------
+@pytest.fixture(autouse=True)
+def logged(monkeypatch):
+    """Catch rows the gateway would save, instead of writing to the real database."""
+    rows = []
+    monkeypatch.setattr(main.db, "log_request", lambda **row: rows.append(row))
+    return rows
+
+
+# --- Basic endpoint tests ------------------------------------------------
 
 def test_health_returns_ok():
     response = client.get("/health")
@@ -32,7 +41,7 @@ def test_ask_when_model_unreachable_returns_503(monkeypatch):
     assert "Is Ollama running" in response.json()["detail"]
 
 
-# --- Day 5 tests: a fake model, so tests don't need Ollama ---------------
+# --- Fake model, so tests don't need Ollama -------------------------------
 
 def use_fake_model(monkeypatch, status_code, body):
     """Replace the real AI model with a fake that always gives the same reply."""
@@ -48,15 +57,14 @@ def use_fake_model(monkeypatch, status_code, body):
     )
 
 
+PARIS_REPLY = {
+    "choices": [{"message": {"content": "Paris"}}],
+    "usage": {"prompt_tokens": 12, "completion_tokens": 3},
+}
+
+
 def test_ask_returns_answer_and_token_counts(monkeypatch):
-    use_fake_model(
-        monkeypatch,
-        200,
-        {
-            "choices": [{"message": {"content": "Paris"}}],
-            "usage": {"prompt_tokens": 12, "completion_tokens": 3},
-        },
-    )
+    use_fake_model(monkeypatch, 200, PARIS_REPLY)
 
     response = client.post("/ask", json={"question": "What is the capital of France?"})
 
@@ -76,3 +84,30 @@ def test_ask_when_model_returns_error_gives_502(monkeypatch):
 
     assert response.status_code == 502
     assert "model not found" in response.json()["detail"]
+
+
+# --- Logging tests (Day 8) ------------------------------------------------
+
+def test_successful_ask_is_logged(monkeypatch, logged):
+    use_fake_model(monkeypatch, 200, PARIS_REPLY)
+
+    client.post("/ask", json={"question": "What is the capital of France?"})
+
+    assert len(logged) == 1
+    row = logged[0]
+    assert row["status_code"] == 200
+    assert row["question"] == "What is the capital of France?"
+    assert row["answer"] == "Paris"
+    assert row["input_tokens"] == 12
+    assert row["output_tokens"] == 3
+
+
+def test_failed_ask_is_logged(monkeypatch, logged):
+    monkeypatch.setattr(main, "MODEL_BASE_URL", "http://127.0.0.1:9/v1")
+
+    client.post("/ask", json={"question": "Hello?"})
+
+    assert len(logged) == 1
+    assert logged[0]["status_code"] == 503
+    assert logged[0]["answer"] is None
+    assert logged[0]["error"] == "Model unreachable"
