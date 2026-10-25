@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app import db
+from app import db, pricing
 
 # --- Settings (read from the .env file) ---------------------------------
 load_dotenv()
@@ -29,11 +29,12 @@ class AskResponse(BaseModel):
     latency_ms: int
     input_tokens: int
     output_tokens: int
+    cost_usd: float | None  # NEW: None means the price is unknown
 
 
 # --- Logging helper -------------------------------------------------------
 async def record(question, status_code, *, answer=None, latency_ms=None,
-                 input_tokens=None, output_tokens=None, error=None):
+                 input_tokens=None, output_tokens=None, cost_usd=None, error=None):
     """Save one row to the requests table without blocking other requests."""
     await asyncio.to_thread(
         db.log_request,
@@ -44,6 +45,7 @@ async def record(question, status_code, *, answer=None, latency_ms=None,
         latency_ms=latency_ms,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        cost_usd=cost_usd,  # NEW
         error=error,
     )
 
@@ -83,20 +85,25 @@ async def ask(req: AskRequest):
 
     data = response.json()
     usage = data.get("usage", {})
+    input_tokens = usage.get("prompt_tokens", 0)
+    output_tokens = usage.get("completion_tokens", 0)
+    cost = pricing.request_cost(MODEL_NAME, input_tokens, output_tokens)  # NEW
 
     result = AskResponse(
         answer=data["choices"][0]["message"]["content"],
         model=MODEL_NAME,
         latency_ms=elapsed_ms(),
-        input_tokens=usage.get("prompt_tokens", 0),
-        output_tokens=usage.get("completion_tokens", 0),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=float(cost) if cost is not None else None,  # NEW
     )
     await record(
         req.question,
         200,
         answer=result.answer,
         latency_ms=result.latency_ms,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,  # NEW: exact Decimal goes to the database
     )
     return result

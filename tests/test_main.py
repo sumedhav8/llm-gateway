@@ -2,7 +2,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main
+from app import main, pricing
 
 client = TestClient(main.app)
 
@@ -100,7 +100,7 @@ def test_successful_ask_is_logged(monkeypatch, logged):
     assert row["answer"] == "Paris"
     assert row["input_tokens"] == 12
     assert row["output_tokens"] == 3
-
+    assert row["cost_usd"] == pricing.request_cost(main.MODEL_NAME, 12, 3)
 
 def test_failed_ask_is_logged(monkeypatch, logged):
     monkeypatch.setattr(main, "MODEL_BASE_URL", "http://127.0.0.1:9/v1")
