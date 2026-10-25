@@ -111,3 +111,20 @@ def test_failed_ask_is_logged(monkeypatch, logged):
     assert logged[0]["status_code"] == 503
     assert logged[0]["answer"] is None
     assert logged[0]["error"] == "Model unreachable"
+
+def test_ask_when_model_times_out_returns_504(monkeypatch, logged):
+    def slow_model(request):
+        raise httpx.ReadTimeout("The model took too long", request=request)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        main.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(slow_model), **kwargs),
+    )
+
+    response = client.post("/ask", json={"question": "Explain how vaccines work"})
+
+    assert response.status_code == 504
+    assert logged[0]["status_code"] == 504
+    assert logged[0]["error"] == "Model timed out"

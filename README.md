@@ -23,6 +23,21 @@ Python, FastAPI, Ollama (local model), Postgres + pgvector, scikit-learn, Stream
     .venv\Scripts\activate
     pip install -r requirements.txt
     copy .env.example .env
+## Baseline (before routing and caching)
+
+Every request goes to a single local model (llama3.2 via Ollama).
+
+| Metric | Value |
+|---|---|
+| Requests | 14 |
+| Success rate | 92.9% |
+| Average latency | 49550 ms |
+| p95 latency | 91810 ms |
+| Cost | $0 (local model) |
+
+Measured on 10/24/2026. Later milestones compare against these numbers.
+
+
 ## Usage
 
 Start the gateway:

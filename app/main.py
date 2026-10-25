@@ -78,6 +78,9 @@ async def ask(req: AskRequest):
         await record(req.question, 503, latency_ms=elapsed_ms(), error="Model unreachable")
         raise HTTPException(503, "Can't reach the model. Is Ollama running?")
 
+    except httpx.TimeoutException:
+        await record(req.question, 504, latency_ms=elapsed_ms(), error="Model timed out")
+        raise HTTPException(504, "The model took too long to answer. Try a smaller model or a shorter question.")
     if response.status_code != 200:
         detail = f"Model returned an error: {response.text[:300]}"
         await record(req.question, 502, latency_ms=elapsed_ms(), error=detail)
