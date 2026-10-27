@@ -1,10 +1,30 @@
+import json
+from dataclasses import replace
+from decimal import Decimal
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main, pricing
+from app import config, main, models, pricing
 
 client = TestClient(main.app)
+
+PARIS_REPLY = {
+    "choices": [{"message": {"content": "Paris"}}],
+    "usage": {"prompt_tokens": 12, "completion_tokens": 3},
+}
+
+
+# --- Fixtures: run every test with fake settings and no real database ----
+
+@pytest.fixture(autouse=True)
+def test_models(monkeypatch):
+    """Use known test models, whatever is in your .env file."""
+    monkeypatch.setitem(config.MODELS, "cheap",
+                        config.ModelConfig("cheap", "http://cheap.test/v1", "ollama", "cheap-model"))
+    monkeypatch.setitem(config.MODELS, "strong",
+                        config.ModelConfig("strong", "http://strong.test/v1", config.PLACEHOLDER_KEY, "strong-model"))
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +33,39 @@ def logged(monkeypatch):
     rows = []
     monkeypatch.setattr(main.db, "log_request", lambda **row: rows.append(row))
     return rows
+
+
+# --- Helpers ---------------------------------------------------------------
+
+def use_fake_model(monkeypatch, status_code=200, body=PARIS_REPLY):
+    """Replace real AI models with a fake. Returns a list of the requests it received."""
+    sent = []
+
+    def fake_model(request):
+        sent.append({"url": str(request.url), "json": json.loads(request.content)})
+        return httpx.Response(status_code, json=body)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        models.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(fake_model), **kwargs),
+    )
+    return sent
+
+
+def use_slow_model(monkeypatch):
+    """Replace real AI models with one that always times out."""
+
+    def slow_model(request):
+        raise httpx.ReadTimeout("The model took too long", request=request)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        models.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(slow_model), **kwargs),
+    )
 
 
 # --- Basic endpoint tests ------------------------------------------------
@@ -33,48 +86,38 @@ def test_ask_with_wrong_type_is_rejected():
     assert response.status_code == 422
 
 
-def test_ask_when_model_unreachable_returns_503(monkeypatch):
-    # Point the gateway at an address where nothing is running
-    monkeypatch.setattr(main, "MODEL_BASE_URL", "http://127.0.0.1:9/v1")
-    response = client.post("/ask", json={"question": "Hello?"})
-    assert response.status_code == 503
-    assert "Is Ollama running" in response.json()["detail"]
+def test_ask_with_unknown_tier_is_rejected():
+    response = client.post("/ask", json={"question": "Hi", "tier": "medium"})
+    assert response.status_code == 422
 
 
-# --- Fake model, so tests don't need Ollama -------------------------------
-
-def use_fake_model(monkeypatch, status_code, body):
-    """Replace the real AI model with a fake that always gives the same reply."""
-
-    def fake_model(request):
-        return httpx.Response(status_code, json=body)
-
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(
-        main.httpx,
-        "AsyncClient",
-        lambda **kwargs: real_client(transport=httpx.MockTransport(fake_model), **kwargs),
-    )
-
-
-PARIS_REPLY = {
-    "choices": [{"message": {"content": "Paris"}}],
-    "usage": {"prompt_tokens": 12, "completion_tokens": 3},
-}
-
+# --- Cheap model (the default) ----------------------------------------------
 
 def test_ask_returns_answer_and_token_counts(monkeypatch):
-    use_fake_model(monkeypatch, 200, PARIS_REPLY)
+    use_fake_model(monkeypatch)
 
     response = client.post("/ask", json={"question": "What is the capital of France?"})
 
     assert response.status_code == 200
     data = response.json()
     assert data["answer"] == "Paris"
-    assert data["model"] == main.MODEL_NAME
+    assert data["model"] == "cheap-model"
+    assert data["tier"] == "cheap"
     assert data["input_tokens"] == 12
     assert data["output_tokens"] == 3
     assert data["latency_ms"] >= 0
+
+
+def test_ask_when_model_unreachable_returns_503(monkeypatch, logged):
+    monkeypatch.setitem(config.MODELS, "cheap",
+                        replace(config.MODELS["cheap"], base_url="http://127.0.0.1:9/v1"))
+
+    response = client.post("/ask", json={"question": "Hello?"})
+
+    assert response.status_code == 503
+    assert "Can't reach the cheap model" in response.json()["detail"]
+    assert logged[0]["status_code"] == 503
+    assert logged[0]["answer"] is None
 
 
 def test_ask_when_model_returns_error_gives_502(monkeypatch):
@@ -86,10 +129,18 @@ def test_ask_when_model_returns_error_gives_502(monkeypatch):
     assert "model not found" in response.json()["detail"]
 
 
-# --- Logging tests (Day 8) ------------------------------------------------
+def test_ask_when_model_times_out_returns_504(monkeypatch, logged):
+    use_slow_model(monkeypatch)
 
-def test_successful_ask_is_logged(monkeypatch, logged):
-    use_fake_model(monkeypatch, 200, PARIS_REPLY)
+    response = client.post("/ask", json={"question": "Explain how vaccines work"})
+
+    assert response.status_code == 504
+    assert logged[0]["status_code"] == 504
+
+
+def test_successful_ask_is_logged_with_cost(monkeypatch, logged):
+    use_fake_model(monkeypatch)
+    monkeypatch.setitem(pricing.PRICES_PER_MILLION, "cheap-model", (Decimal("1"), Decimal("2")))
 
     client.post("/ask", json={"question": "What is the capital of France?"})
 
@@ -98,33 +149,7 @@ def test_successful_ask_is_logged(monkeypatch, logged):
     assert row["status_code"] == 200
     assert row["question"] == "What is the capital of France?"
     assert row["answer"] == "Paris"
-    assert row["input_tokens"] == 12
-    assert row["output_tokens"] == 3
-    assert row["cost_usd"] == pricing.request_cost(main.MODEL_NAME, 12, 3)
-
-def test_failed_ask_is_logged(monkeypatch, logged):
-    monkeypatch.setattr(main, "MODEL_BASE_URL", "http://127.0.0.1:9/v1")
-
-    client.post("/ask", json={"question": "Hello?"})
-
-    assert len(logged) == 1
-    assert logged[0]["status_code"] == 503
-    assert logged[0]["answer"] is None
-    assert logged[0]["error"] == "Model unreachable"
-
-def test_ask_when_model_times_out_returns_504(monkeypatch, logged):
-    def slow_model(request):
-        raise httpx.ReadTimeout("The model took too long", request=request)
-
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(
-        main.httpx,
-        "AsyncClient",
-        lambda **kwargs: real_client(transport=httpx.MockTransport(slow_model), **kwargs),
-    )
-
-    response = client.post("/ask", json={"question": "Explain how vaccines work"})
-
-    assert response.status_code == 504
-    assert logged[0]["status_code"] == 504
-    assert logged[0]["error"] == "Model timed out"
+    assert row["model"] == "cheap-model"
+    assert row["route"] == "cheap"
+    # 12 input tokens x $1/M + 3 output tokens x $2/M = $0.000018
+    assert row["cost_usd"] == Decimal("0.000018")
