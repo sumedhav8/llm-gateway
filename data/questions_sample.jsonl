@@ -1,0 +1,20 @@
+{"id": "fact-01", "category": "fact", "question": "What is the capital of Japan?", "reference": "Tokyo"}
+{"id": "fact-02", "category": "fact", "question": "How many continents are there on Earth?", "reference": "7"}
+{"id": "fact-03", "category": "fact", "question": "What is the chemical symbol for gold?", "reference": "Au"}
+{"id": "fact-04", "category": "fact", "question": "Who wrote the play Romeo and Juliet?", "reference": "William Shakespeare"}
+{"id": "fact-05", "category": "fact", "question": "What is the largest planet in our solar system?", "reference": "Jupiter"}
+{"id": "math-01", "category": "math", "question": "What is 17 multiplied by 23?", "reference": "391"}
+{"id": "math-02", "category": "math", "question": "A shirt costs $40 and is on sale for 25% off. What is the sale price?", "reference": "$30"}
+{"id": "math-03", "category": "math", "question": "If a train travels 180 miles in 3 hours, what is its average speed in miles per hour?", "reference": "60"}
+{"id": "math-04", "category": "math", "question": "Sara has 3 times as many apples as Tom. Together they have 48 apples. How many apples does Sara have?", "reference": "36"}
+{"id": "math-05", "category": "math", "question": "What is the sum of all whole numbers from 1 to 100?", "reference": "5050"}
+{"id": "reason-01", "category": "reasoning", "question": "All roses are flowers. Some flowers fade quickly. Does it follow that some roses fade quickly? Answer yes or no and explain briefly.", "reference": "No"}
+{"id": "reason-02", "category": "reasoning", "question": "I have two coins that add up to 30 cents, and one of them is not a nickel. What are the two coins?", "reference": "A quarter and a nickel"}
+{"id": "reason-03", "category": "reasoning", "question": "If it takes 5 machines 5 minutes to make 5 widgets, how long would it take 100 machines to make 100 widgets?", "reference": "5 minutes"}
+{"id": "code-01", "category": "coding", "question": "Write a Python function that returns True if a string is a palindrome, ignoring case.", "reference": null}
+{"id": "code-02", "category": "coding", "question": "In SQL, how do you find the number of rows in a table called orders?", "reference": "SELECT COUNT(*) FROM orders;"}
+{"id": "code-03", "category": "coding", "question": "What is the difference between a list and a tuple in Python?", "reference": null}
+{"id": "explain-01", "category": "explanation", "question": "Explain in two sentences why the sky is blue.", "reference": null}
+{"id": "explain-02", "category": "explanation", "question": "Explain what an API is to someone who has never programmed.", "reference": null}
+{"id": "everyday-01", "category": "everyday", "question": "Give me three quick tips for staying focused while working from home.", "reference": null}
+{"id": "everyday-02", "category": "everyday", "question": "Write a short, polite email declining a meeting invitation.", "reference": null}
