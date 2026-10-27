@@ -40,9 +40,10 @@ Measured on 10/24/2026. Later milestones compare against these numbers.
 
 ## Usage
 
-Start the gateway:
+Choose which model answers with `tier` (default: `cheap`):
 
-    uvicorn app.main:app --reload
+    {"question": "What is 17 x 23?"}
+    {"question": "Prove that 17 is prime", "tier": "strong"}
 
 Then open http://localhost:8000/docs to send a question to `/ask`.
 

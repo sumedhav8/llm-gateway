@@ -153,3 +153,45 @@ def test_successful_ask_is_logged_with_cost(monkeypatch, logged):
     assert row["route"] == "cheap"
     # 12 input tokens x $1/M + 3 output tokens x $2/M = $0.000018
     assert row["cost_usd"] == Decimal("0.000018")
+
+
+
+# --- Strong model (Day 12) ------------------------------------------------
+
+def give_strong_model_a_key(monkeypatch):
+    monkeypatch.setitem(config.MODELS, "strong",
+                        replace(config.MODELS["strong"], api_key="test-key"))
+
+
+def test_strong_tier_uses_the_strong_model(monkeypatch):
+    give_strong_model_a_key(monkeypatch)
+    sent = use_fake_model(monkeypatch)
+
+    response = client.post("/ask", json={"question": "Prove that 17 is prime", "tier": "strong"})
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "strong-model"
+    assert response.json()["tier"] == "strong"
+    # The request really went to the strong model's address, with its name
+    assert sent[0]["url"].startswith("http://strong.test/v1")
+    assert sent[0]["json"]["model"] == "strong-model"
+
+
+def test_strong_tier_without_api_key_explains_what_to_do(monkeypatch):
+    sent = use_fake_model(monkeypatch)  # strong model still has the placeholder key
+
+    response = client.post("/ask", json={"question": "Hello?", "tier": "strong"})
+
+    assert response.status_code == 503
+    assert "STRONG_API_KEY" in response.json()["detail"]
+    assert sent == []  # the gateway never tried to call the model
+
+
+def test_strong_request_is_logged_with_its_route(monkeypatch, logged):
+    give_strong_model_a_key(monkeypatch)
+    use_fake_model(monkeypatch)
+
+    client.post("/ask", json={"question": "Prove that 17 is prime", "tier": "strong"})
+
+    assert logged[0]["route"] == "strong"
+    assert logged[0]["model"] == "strong-model"
