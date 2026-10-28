@@ -33,3 +33,14 @@
 - Llama's only miss: the logic question (reason-01). It answered "Yes" when the correct answer is "No."
 - Lesson: my "does the answer contain the reference?" check wrongly marked Claude's correct answer to reason-02 as wrong because of different wording. Simple text matching isn't reliable, so grading needs exact number checks plus an LLM judge.
 - Next: the sample questions are mostly too easy. Moving to 200 real questions from GSM8K and Dolly.
+
+## Oct 28: 200-question test set and automatic grading
+- Built: a 200-question test set (100 GSM8K math problems, 100 Dolly everyday requests) with a fixed random seed, and a grading script: exact number checks for math, Claude as an LLM judge for everything else.
+- Ran both models on all 200 questions and graded every cheap-model answer.
+- Finding: the free model (llama3.2:1b) was good enough on 68/200 questions (34%).
+  - Math: 41% for llama vs 89% for Claude.
+  - Everyday requests: 17–33% depending on category (brainstorming lowest at 17%, open Q&A 31%).
+- Judge cost for grading 100 open-ended answers: $0.24.
+- What it means: about a third of these questions could go to the free model. That's the realistic ceiling for what a router could save on this question mix, if it routes perfectly.
+- Problem: test_grading.py imported scripts that didn't exist yet → limited the import to what exists each day.
+- Next: hand-check a sample of the judge's verdicts to see whether it can be trusted.
