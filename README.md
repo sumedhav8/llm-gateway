@@ -45,6 +45,13 @@ Choose which model answers with `tier` (default: `cheap`):
     {"question": "What is 17 x 23?"}
     {"question": "Prove that 17 is prime", "tier": "strong"}
 
+## Datasets
+
+- [GSM8K](https://github.com/openai/grade-school-math) (MIT license): grade-school math word problems
+- [Dolly 15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k) (CC BY-SA 3.0): everyday requests written by people
+
+`python -m scripts.build_dataset` builds a fixed, repeatable sample of 200 questions in `data/questions.jsonl`.
+
 Then open http://localhost:8000/docs to send a question to `/ask`.
 
 ## Running tests
