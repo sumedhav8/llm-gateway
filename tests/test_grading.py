@@ -1,6 +1,6 @@
 import random
 
-from scripts import build_dataset, grade, review_judge
+from scripts import build_dataset,grade
 
 
 # --- Building the dataset (Day 14) ----------------------------------------
@@ -27,3 +27,31 @@ def test_sampling_is_repeatable():
     assert first == second
 
 
+def test_to_number_handles_money_and_commas():
+    assert grade.to_number("$1,250") == 1250
+    assert grade.to_number("30.00") == 30
+    assert grade.to_number("Tokyo") is None
+
+
+def test_last_number_reads_the_final_answer():
+    assert grade.last_number("17 x 23: first 17 x 20 = 340, then 340 + 51 = 391") == 391
+    assert grade.last_number("No numbers here") is None
+
+
+def test_number_matches():
+    assert grade.number_matches("So the total is 1,018 dollars.", "1018")
+    assert not grade.number_matches("The answer is 1017.", "1018")
+
+
+def test_grading_method():
+    assert grade.grading_method({"reference": "391"}) == "number"
+    assert grade.grading_method({"reference": "Tokyo"}) == "judge"
+    assert grade.grading_method({"reference": None}) == "judge"
+    assert grade.grading_method({"grading": "judge", "reference": "7"}) == "judge"
+
+
+def test_parse_verdict():
+    assert grade.parse_verdict("PASS\nThe answer is correct.") is True
+    assert grade.parse_verdict("\nfail\nIt misses the key point.") is False
+    assert grade.parse_verdict("**PASS**\nCorrect.") is True
+    assert grade.parse_verdict("I think it is mostly fine.") is None
