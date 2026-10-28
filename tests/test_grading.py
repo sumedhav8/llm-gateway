@@ -1,6 +1,6 @@
 import random
 
-from scripts import build_dataset,grade
+from scripts import build_dataset,grade,review_judge
 
 
 # --- Building the dataset (Day 14) ----------------------------------------
@@ -55,3 +55,8 @@ def test_parse_verdict():
     assert grade.parse_verdict("\nfail\nIt misses the key point.") is False
     assert grade.parse_verdict("**PASS**\nCorrect.") is True
     assert grade.parse_verdict("I think it is mostly fine.") is None
+
+def test_agreement_rate():
+    pairs = [(True, True), (False, False), (True, False), (True, True)]
+    assert review_judge.agreement(pairs) == 0.75
+    assert review_judge.agreement([]) == 0.0

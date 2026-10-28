@@ -56,4 +56,15 @@ Then open http://localhost:8000/docs to send a question to `/ask`.
 
 ## Running tests
 
-    pytest -v
+## Results so far
+
+On 200 questions (100 GSM8K math, 100 Dolly everyday requests):
+
+| | Local llama | Claude Sonnet |
+|---|---|---|
+| Good enough / correct | [34]% | 89]% math accuracy |
+| Average response time | [31.5] s | [3.7] s |
+| Cost for 200 questions | $0 | $[0.728] |
+
+- The free model was good enough on [34]% of questions, so a router could send those away from the paid model.
+- Claude-as-judge agreed with my own grading on [47]% of a 20-answer sample.
