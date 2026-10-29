@@ -44,3 +44,18 @@
 - What it means: about a third of these questions could go to the free model. That's the realistic ceiling for what a router could save on this question mix, if it routes perfectly.
 - Problem: test_grading.py imported scripts that didn't exist yet → limited the import to what exists each day.
 - Next: hand-check a sample of the judge's verdicts to see whether it can be trusted.
+
+## Oct 28 (continued): checking the judge
+- Reviewed 17 of the judge's verdicts myself, without seeing its decision first.
+- Finding: we agreed on 8/17 (47%), but all 9 disagreements went one way: I passed answers the judge failed.
+- Reading the judge's reasons, most of those answers contained real factual errors (invented chess players and openings, wrong facts about Charleston and Alaska) or didn't actually answer the question. I had judged them on how fluent they sounded.
+- Lesson: small models hallucinate confidently, and fluent answers hide errors from a quick read. A judge with a reference answer catches them.
+- The judge seemed too strict in a couple of cases (formatting, missing details from the reference).
+
+## Oct 29: checking the math grading
+- Checked 10 math answers marked wrong: all 10 were really wrong, and none were correct answers mis-graded. The last-number check is reliable.
+- Llama's math errors are mostly multi-step reasoning mistakes, not arithmetic:
+  - gsm8k-0018: reached the correct $66 mid-answer, then did an unnecessary subtraction and ended at $134.
+  - gsm8k-0017: divided dollars by the number of kids and called the result "books."
+  - gsm8k-0016: misread what the question asked and gave an unrelated number.
+- Takeaway: multi-step word problems are exactly what the router should send to the strong model.
