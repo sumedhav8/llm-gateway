@@ -68,3 +68,18 @@ On 200 questions (100 GSM8K math, 100 Dolly everyday requests):
 
 - The free model was good enough on [34]% of questions, so a router could send those away from the paid model.
 - Claude-as-judge agreed with my own grading on [47]% of a 20-answer sample.
+
+### Router (first attempt)
+
+![Cost saved vs. answer quality](evals/cost_vs_quality.png)
+
+- Approach: logistic regression on question embeddings (nomic-embed-text), scored with 5-fold cross-validation on 200 labeled questions.
+- Result: cross-validated ROC AUC of **[AUC]**, so the trained router does **not yet beat random routing**. At about 40% cost saved, it gives about 65% good answers, versus about 69% for random.
+- Baselines:
+  - Always strong: about 95% good answers at full cost
+  - Random: saves about 41% at about 69% good answers
+  - Hand-written rules: saves about **56%** at about **68%** good answers, the best practical strategy so far
+  - Perfect routing (oracle, not achievable): saves about **26%** with about **95%** good answers. About a quarter of the cost could be saved with no quality loss, if a router could pick the right questions.
+- Why the router struggles: 200 examples is too few for 768-number embeddings (overfitting), and question difficulty is subtler than topic.
+- Next: stronger regularization, adding simple features (length, number count, category), and more labeled data.
+- Quality assumes the strong model is correct on everyday questions, since those weren't graded.
