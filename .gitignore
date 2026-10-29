@@ -221,3 +221,5 @@ __marimo__/
 .idea/
 data/results/
 data/raw/
+data/features/
+data/models/
