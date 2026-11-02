@@ -1,0 +1,4 @@
+design,no quality loss,<=1% loss,<=3% loss,<=5% loss
+router (question only),0.0,0.0,0.6534,0.8213
+cascade A: self-check,0.0607,0.4349,0.6879,0.7953
+cascade B: agreement + self-check,0.1527,0.4717,0.6839,0.7806

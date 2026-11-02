@@ -77,8 +77,33 @@ Results
 - Embedding router (scaled embeddings + logistic regression): cross-validated AUC 0.735 (llama: 0.46). It clearly beats the hand-written rules, but with only 24 Haiku failures in 199 questions, the exact savings at a given quality level are noisy (they swing between roughly 30% and 80%).
 - Oracle (perfect routing): 98% quality at 78% savings. Perfect routing beats always using Sonnet, because Haiku sometimes gets right what Sonnet gets wrong.
 
-**Learned**
+Learned
 - Whether routing works depends on the cheap model: with a weak one, nothing works; with a strong one, routing pays off.
 - Rules written by hand encode assumptions that go stale when models change; a router trained on labels adapts.
 - My two scripts disagreed (AUC 0.675 vs 0.735) because one scaled the embeddings and one didn't. Training and evaluation must use exactly the same pipeline.
 - Caveat: Sonnet's everyday answers are assumed correct, so "always Sonnet" quality is slightly flattered.
+
+#Cascade vs router
+
+What I did
+- Built `scripts/cascade.py`: Haiku answers, then a check decides whether to keep the answer or escalate to Sonnet.
+  - Check A: Haiku rates its own answer from 0 to 100 (it never sees the reference answer).
+  - Check B: for math, ask Haiku twice and compare the final numbers; self-check for the rest.
+- Paid check calls are cached in `data/cascade/`, so re-runs are free. Added 4 tests (40 passed).
+
+Results (199 questions)
+- The self-check scored below 90 on 18/24 of Haiku's wrong answers, but it also doubts many correct ones (at threshold 90, only 57% of answers kept cheap).
+- Asking twice caught only 3/11 wrong math answers: Haiku usually repeats the same mistake.
+- Savings at a given quality loss (router / cascade A / cascade B):
+  - no loss: 0% / 6% / 15%
+  - ≤1%: 0% / 43% / 47%
+  - ≤3%: 65% / 69% / 68%
+  - ≤5%: 82% / 80% / 78%
+- When quality must stay within 1% of Sonnet, only the cascade saves money. At 3–5% loss, router and cascade tie (the differences are 1–2 questions).
+- The self-check roughly doubled the Haiku spend, and the cascade adds latency (up to 3 calls in a row).
+
+Learned
+- Looking at the answer beats guessing from the question, but only when you need high quality.
+- The model's errors are systematic, so sampling twice doesn't catch them.
+- A "check" has its own cost and latency, and those belong in the comparison.
+- With 24 failures, differences of a few percent are noise.

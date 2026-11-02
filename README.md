@@ -83,3 +83,59 @@ On 200 questions (100 GSM8K math, 100 Dolly everyday requests):
 - Why the router struggles: 200 examples is too few for 768-number embeddings (overfitting), and question difficulty is subtler than topic.
 - Next: stronger regularization, adding simple features (length, number count, category), and more labeled data.
 - Quality assumes the strong model is correct on everyday questions, since those weren't graded.
+
+## Router v2: Claude Haiku as the cheap model
+
+With llama3.2:1b as the cheap model, no router could beat simple rules (the cheap model was good enough on only 34% of questions). Switching the cheap tier to **Claude Haiku** changed that. Only `.env` changed; the gateway code didn't.
+
+| | llama3.2:1b | Claude Haiku |
+|---|---|---|
+| Cheap model good enough | 68/200 (34%) | **175/199 (88%)** |
+| Math (100 questions) | 41% | **89%**, the same as Sonnet (89/100) |
+| Everyday questions | 27% | **87%** |
+
+Strategies on 199 graded questions (costs use list prices per million tokens):
+
+| Strategy | Sent to cheap | Quality | Cost | Saves |
+|---|---|---|---|---|
+| Always Sonnet | 0% | 94.5% | $0.718 | 0% |
+| Always Haiku | 100% | 87.9% | $0.037 | 95% |
+| Random | 39% | 89.4% | $0.439 | 39% |
+| Hand-written rules | 37% | 90.5% | $0.338 | 53% |
+| Oracle (perfect routing, impossible) | 88% | **98.0%** | $0.158 | 78% |
+
+- **The trained router works now.** Scaled question embeddings plus logistic regression reach a cross-validated **AUC of 0.735** (llama: 0.46) and clearly beat the rules at the same quality.
+- **The hand-written rules went stale.** They send every math question to Sonnet, which made sense with llama but wastes money now that Haiku matches Sonnet on math. The trained router learned this from the data.
+- **Perfect routing beats always using Sonnet** (98% vs 94.5%), because Haiku sometimes gets right what Sonnet gets wrong.
+
+![Router: cost vs quality](evals/cost_vs_quality_best.png)
+
+## Cascade vs router
+
+A **router** decides from the question alone, before any model call. A **cascade** answers with Haiku first, checks the answer, and escalates to Sonnet only if the check fails.
+
+- **Cascade A (self-check):** Haiku rates its own answer from 0 to 100, without seeing the reference answer.
+- **Cascade B (agreement + self-check):** for math, Haiku answers twice and the final numbers are compared; other questions use the self-check.
+
+Cost saved compared with always using Sonnet, at a given maximum quality loss:
+
+| Quality you give up | Router | Cascade A | Cascade B |
+|---|---|---|---|
+| None | 0% | 6% | **15%** |
+| ≤1% | 0% | 43% | **47%** |
+| ≤3% | 65% | **69%** | 68% |
+| ≤5% | **82%** | 80% | 78% |
+
+**Findings**
+- **When quality must stay within 1% of Sonnet, only the cascade saves money (about 45%)**, because it can see the answer. When 3–5% loss is acceptable, router and cascade tie.
+- **Haiku partly knows when it's wrong:** its self-check scored below 90 on 18 of its 24 wrong answers, but it also doubts many correct answers.
+- **Asking twice barely helps for math:** the two answers disagreed on only 3 of 11 wrong ones. The model's errors are systematic, so it repeats the same mistake.
+- **Checks have costs:** the self-check roughly doubles the Haiku spend, and the cascade adds latency (up to three calls in a row), while the router adds almost none.
+
+![Cascade vs router](evals/cascade_vs_router.png)
+
+**Limitations**
+- Only 199 questions and 24 Haiku failures, so differences of a few percent are 1–2 questions (noise).
+- Sonnet's everyday answers are assumed correct (only its math is checked), which slightly flatters "always Sonnet".
+- The LLM judge (Sonnet) is somewhat strict; a human review of a sample agreed with it 47% of the time, with every disagreement being a case the judge failed.
+- Prices are from `app/pricing.py` and should be confirmed on the official pricing page.
