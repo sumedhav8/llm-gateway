@@ -131,3 +131,31 @@ Problems I hit
 - `.env` changes seemed ignored: four old uvicorn processes were still listening on port 8000 after Ctrl+C (a Windows issue with `--reload`). Worked around it by running on port 8001.
 
 Next: replay the 200 test questions through the live gateway in both modes and check that the savings match the offline evaluation.
+
+## Nov 2 (later): Live replay of 199 questions
+
+What I did
+- Added `"mode"` to requests, so cascade or router can be chosen per request without restarting.
+- Added `scripts/replay.py`: sends the labeled questions through the running gateway and reports quality, cost, calls and latency.
+- Added `scripts/route_report.py`: cost and latency by route, straight from the requests table.
+- Tests: 55 passed.
+
+Results (199 questions each, 4 at a time, 0 errors out of 398 requests)
+| | Cascade (threshold 85) | Router (threshold 0.95) |
+|---|---|---|
+| Answered by Haiku | 71% | 87% |
+| Quality | 92.0% | 97.0% (not valid, see below) |
+| Saves vs always Sonnet | 41% | 79% (not valid) |
+| Calls per question | 2.29 | 1.00 |
+| Avg / p95 latency | 5.3 s / 15.4 s | 5.2 s / 10.3 s |
+
+- The cascade matched the offline estimate closely (offline: 94.0% quality, 43% savings). Live quality was 2 points lower because the live answers were new samples and math was checked on them exactly.
+- The router's live numbers are almost the same as perfect routing (98%, 78%). That's data leakage: the router was trained on these same 199 questions. Its honest estimate is still the cross-validated one (about 65% savings at at most 3% loss).
+- Latency: escalated cascade requests averaged 11.5 s (p95 17 s), because they make three calls in a row. Router-to-Haiku (one call) was slower than cascade-kept (two calls), because the router computes embeddings in Ollama on my laptop's CPU, which becomes a bottleneck under load.
+
+Learned
+- Never evaluate a model on the data it was trained on. A result that matches the theoretical best is a warning sign.
+- The offline evaluation predicted live cascade behavior well, so the method is trustworthy.
+- Live testing shows things offline evaluation can't: latency, and bottlenecks like local embeddings.
+
+Next: build a held-out set of new questions to compare router and cascade fairly.

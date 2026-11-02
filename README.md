@@ -139,3 +139,21 @@ Cost saved compared with always using Sonnet, at a given maximum quality loss:
 - Sonnet's everyday answers are assumed correct (only its math is checked), which slightly flatters "always Sonnet".
 - The LLM judge (Sonnet) is somewhat strict; a human review of a sample agreed with it 47% of the time, with every disagreement being a case the judge failed.
 - Prices are from `app/pricing.py` and should be confirmed on the official pricing page.
+
+## Live replay
+
+All 199 questions sent through the running gateway in each mode (4 at a time; 0 errors out of 398 requests).
+
+| | Cascade (threshold 85) | Router (threshold 0.95) |
+|---|---|---|
+| Answered by Haiku | 71% | 87% |
+| Quality | **92.0%** | 97.0%* |
+| Saves vs always Sonnet | **41%** | 79%* |
+| Calls per question | 2.29 | 1.00 |
+| Avg / p95 latency | 5.3 s / 15.4 s | 5.2 s / 10.3 s |
+
+\* **Not a valid result.** The router was trained on these same questions, so it nearly reproduces perfect routing (98%, 78%). Its honest, cross-validated estimate is about 65% savings at at most 3% quality loss. A held-out test set is next.
+
+- **The cascade's live results matched the offline estimate** (94.0% quality, 43% savings), within about 4 questions.
+- **Escalation is slow:** escalated requests make three calls in a row (avg 11.5 s, p95 17 s).
+- **Local embeddings are a bottleneck:** the router's single call was slower than the cascade's two, because embeddings are computed in Ollama on a laptop CPU. A hosted embedding model would remove most of that delay.
