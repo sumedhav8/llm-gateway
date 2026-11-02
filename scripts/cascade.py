@@ -26,13 +26,13 @@ import argparse
 import asyncio
 import csv
 import json
-import re
 from pathlib import Path
 
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
 from app import config, pricing
 from app.models import ModelError, ask_model
+from app.routing import SELF_CHECK_PROMPT, parse_confidence  # same check as the live gateway
 from scripts.grade import last_number
 from scripts.routing_data import RESULTS_DIR, evaluate, load_items, newest_labels_file, read_jsonl
 from scripts.train_router import best_row, load_training_data, make_model, threshold_curve
@@ -42,29 +42,8 @@ EVALS_DIR = Path("evals")
 CONFIDENCE_THRESHOLDS = [0, 50, 60, 70, 80, 85, 90, 95, 100, 101]   # 101 = always escalate
 PARALLEL_CALLS = 5
 
-SELF_CHECK_PROMPT = """Here is a question and an answer written by an AI assistant.
-
-Question:
-{question}
-
-Answer:
-{answer}
-
-How confident are you that this answer is correct and complete, so that a user would be satisfied with it?
-Reply with only a whole number from 0 to 100."""
-
 
 # --- Small helpers (tested in tests/test_cascade.py) ----------------------------
-
-def parse_confidence(text):
-    """The first whole number from 0 to 100 in the reply, or None."""
-    for match in re.findall(r"\d+", text or ""):
-        value = int(match)
-        if 0 <= value <= 100:
-            return value
-    return None
-
-
 def numbers_agree(answer_1, answer_2):
     """True when both answers end with the same number."""
     a, b = last_number(answer_1), last_number(answer_2)

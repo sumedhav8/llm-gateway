@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app import config, db, pricing
+from app import config, db, pricing, routing
 from app.models import ModelError, ask_model
 
 app = FastAPI(title="LLM Gateway")
@@ -14,7 +14,8 @@ app = FastAPI(title="LLM Gateway")
 # --- What a request and a response look like ----------------------------
 class AskRequest(BaseModel):
     question: str
-    tier: Literal["cheap", "strong"] = "cheap"
+    # cheap / strong: always use that model.  auto: let the gateway decide (see app/routing.py)
+    tier: Literal["cheap", "strong", "auto"] = "cheap"
 
 
 class AskResponse(BaseModel):
@@ -25,6 +26,10 @@ class AskResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float | None  # None means the price is unknown
+    route: str = "direct"   # how the model was chosen, e.g. "cascade-accepted"
+    confidence: int | None = None            # cascade: the cheap model's self-check score
+    router_probability: float | None = None  # router: chance the cheap model is good enough
+    calls: int = 1                           # model calls made for this request
 
 
 # --- Helpers --------------------------------------------------------------
@@ -33,14 +38,14 @@ def elapsed_ms(start):
 
 
 async def record(question, model, status_code, *, answer=None, latency_ms=None,
-                 input_tokens=None, output_tokens=None, cost_usd=None, error=None):
+                 input_tokens=None, output_tokens=None, cost_usd=None, error=None, route=None):
     """Save one row to the requests table without blocking other requests."""
     await asyncio.to_thread(
         db.log_request,
         question=question,
         answer=answer,
         model=model.name,
-        route=model.tier,
+        route=route or model.tier,
         status_code=status_code,
         latency_ms=latency_ms,
         input_tokens=input_tokens,
@@ -57,8 +62,48 @@ def health():
     return {"status": "ok"}
 
 
+async def ask_auto(req: AskRequest):
+    start = time.perf_counter()
+    try:
+        result = await routing.answer_auto(req.question)
+    except ModelError as exc:
+        await record(req.question, config.MODELS["strong"], exc.status_code, route="auto-failed",
+                     latency_ms=elapsed_ms(start), error=exc.message)
+        raise HTTPException(exc.status_code, exc.message)
+
+    latency = elapsed_ms(start)
+    cost = result.cost_usd
+    await record(
+        req.question,
+        result.model,
+        200,
+        answer=result.answer,
+        latency_ms=latency,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        cost_usd=cost,
+        route=result.route,
+    )
+    return AskResponse(
+        answer=result.answer,
+        model=result.model.name,
+        tier=result.model.tier,
+        latency_ms=latency,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        cost_usd=float(cost) if cost is not None else None,
+        route=result.route,
+        confidence=result.confidence,
+        router_probability=result.router_probability,
+        calls=len(result.steps),
+    )
+
+
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
+    if req.tier == "auto":
+        return await ask_auto(req)
+
     model = config.MODELS[req.tier]
     start = time.perf_counter()
 
