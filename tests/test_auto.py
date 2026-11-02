@@ -156,3 +156,20 @@ def test_auto_tier_through_the_api(monkeypatch):
     assert data["calls"] == 3
     assert rows[0]["route"] == "cascade-escalated"
     assert rows[0]["model"] == "claude-sonnet-5-5"
+
+
+
+def test_mode_in_the_request_overrides_env(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    monkeypatch.setattr(main.db, "log_request", lambda **row: None)
+    fake_models(monkeypatch)
+    monkeypatch.setattr(routing, "ROUTING_MODE", "cascade")
+    monkeypatch.setattr(routing, "router_probability", lambda question: 0.99)
+    monkeypatch.setattr(routing, "ROUTER_THRESHOLD", 0.5)
+
+    response = TestClient(main.app).post("/ask", json={"question": "Hi", "tier": "auto", "mode": "router"})
+
+    assert response.status_code == 200
+    assert response.json()["route"] == "router-cheap"

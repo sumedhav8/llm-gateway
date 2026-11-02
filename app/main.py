@@ -16,6 +16,8 @@ class AskRequest(BaseModel):
     question: str
     # cheap / strong: always use that model.  auto: let the gateway decide (see app/routing.py)
     tier: Literal["cheap", "strong", "auto"] = "cheap"
+    # Only for tier auto: override ROUTING_MODE from .env for this one request
+    mode: Literal["cascade", "router"] | None = None
 
 
 class AskResponse(BaseModel):
@@ -65,7 +67,7 @@ def health():
 async def ask_auto(req: AskRequest):
     start = time.perf_counter()
     try:
-        result = await routing.answer_auto(req.question)
+        result = await routing.answer_auto(req.question, mode=req.mode)
     except ModelError as exc:
         await record(req.question, config.MODELS["strong"], exc.status_code, route="auto-failed",
                      latency_ms=elapsed_ms(start), error=exc.message)
