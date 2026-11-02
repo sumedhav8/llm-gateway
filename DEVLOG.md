@@ -107,3 +107,27 @@ Learned
 - The model's errors are systematic, so sampling twice doesn't catch them.
 - A "check" has its own cost and latency, and those belong in the comparison.
 - With 24 failures, differences of a few percent are noise.
+
+
+## Nov 2: "tier": "auto" in the gateway
+
+What I did
+- Added `app/routing.py`: the gateway now picks the model itself for `"tier": "auto"`.
+  - Cascade mode (default): Haiku answers, rates its own answer, and escalates to Sonnet below 85 (offline: 94.0% quality, 43% savings).
+  - Router mode: the trained router picks Haiku or Sonnet from the question with one call (threshold 0.95, from train_router's "at most 3% loss" setting).
+- Fallbacks: Haiku down → Sonnet; Sonnet down → Haiku's answer; router unavailable → cascade.
+- Responses and database rows record the route, self-check score, number of calls and total cost (including the check).
+- The self-check prompt now lives in one place, shared by the offline evaluation and the live gateway.
+- Tests: 51 passed.
+
+Tried it live (cascade mode)
+- "Capital of France": Haiku kept, $0.00002, 2.6 s
+- Multi-step pens math problem: escalated to Sonnet, $0.0031, 7.6 s
+- Haiku about rain: Haiku kept, $0.00017, 3.0 s
+- Easy questions stay almost free; the escalated one cost about 150x more and took 3x longer (three calls in a row).
+
+Problems I hit
+- Requests weren't logged: Docker Desktop and the database container were off. The gateway kept answering (by design) but couldn't save rows. Start order: Docker Desktop → `docker compose up -d` → Ollama → uvicorn.
+- `.env` changes seemed ignored: four old uvicorn processes were still listening on port 8000 after Ctrl+C (a Windows issue with `--reload`). Worked around it by running on port 8001.
+
+Next: replay the 200 test questions through the live gateway in both modes and check that the savings match the offline evaluation.
