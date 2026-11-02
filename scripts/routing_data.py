@@ -8,8 +8,8 @@ How a decision is scored:
 - Sent to strong -> it's a good answer if the strong model was correct
                     (known for math; assumed correct for everyday questions,
                     since we didn't grade the strong model's everyday answers).
-- Cost is what the strong model actually cost on the questions sent to it.
-  The cheap model is free.
+- Cost is what each model actually cost on the questions sent to it
+  (zero for a free local cheap model).
 """
 
 import json
@@ -32,17 +32,17 @@ def read_jsonl(path):
 
 
 def load_items(labels_path):
-    """Labeled questions, each with what it cost to send it to the strong model."""
+    """Labeled questions, each with what it cost on the cheap and the strong model."""
     labels = read_jsonl(labels_path)
 
     # The labels file is named labels_<run>.jsonl; costs live in data/results/<run>.jsonl
     run_name = Path(labels_path).stem.removeprefix("labels_")
     results_path = RESULTS_DIR / f"{run_name}.jsonl"
-    strong_cost = {}
+    cost = {"cheap": {}, "strong": {}}
     if results_path.exists():
         for row in read_jsonl(results_path):
-            if row["tier"] == "strong" and row.get("cost_usd"):
-                strong_cost[row["id"]] = float(row["cost_usd"])
+            if row.get("cost_usd"):
+                cost.setdefault(row["tier"], {})[row["id"]] = float(row["cost_usd"])
 
     items = []
     for label in labels:
@@ -54,7 +54,8 @@ def load_items(labels_path):
             "question": label["question"],
             "good_enough": bool(label["good_enough"]),
             "strong_ok": label["strong_correct"] if label["strong_correct"] is not None else True,
-            "strong_cost": strong_cost.get(label["id"], 0.0),
+            "strong_cost": cost["strong"].get(label["id"], 0.0),
+            "cheap_cost": cost["cheap"].get(label["id"], 0.0),
         })
     return items
 
@@ -67,6 +68,7 @@ def evaluate(items, send_to_cheap):
     for item, cheap in zip(items, send_to_cheap):
         if cheap:
             good += item["good_enough"]
+            cost += item.get("cheap_cost", 0.0)
         else:
             good += item["strong_ok"]
             cost += item["strong_cost"]

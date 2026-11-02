@@ -59,3 +59,26 @@
   - gsm8k-0017: divided dollars by the number of kids and called the result "books."
   - gsm8k-0016: misread what the question asked and gave an unrelated number.
 - Takeaway: multi-step word problems are exactly what the router should send to the strong model.
+
+## Nov 1: Claude Haiku as the cheap model
+
+What I did
+- Switched the cheap tier from local llama3.2:1b to Claude Haiku (only `.env` changed; the gateway code didn't).
+- Added `scripts/merge_results.py` so I only re-ran the cheap model and reused the Sonnet answers I'd already paid for.
+- Updated `routing_data.py` to count the cheap model's cost (it isn't free anymore).
+- Re-graded all 200 questions (judge cost $0.21) and re-ran every router.
+- Fixed `train_router.py` to use the same pipeline as `improve_router` (StandardScaler + logistic regression) and saved the new router model.
+- Tests: 36 passed.
+
+Results
+- Haiku was good enough on 175/199 questions (88%), compared with 34% for llama. On math it matched Sonnet exactly (89/100).
+- Always Haiku: 87.9% quality and 95% cheaper than always Sonnet (94.5% quality, $0.72 for 199 questions).
+- Hand-written rules: 90.5% quality, 53% savings. They sent all 100 math questions to Sonnet, which wasted money now that Haiku is as good at math.
+- Embedding router (scaled embeddings + logistic regression): cross-validated AUC 0.735 (llama: 0.46). It clearly beats the hand-written rules, but with only 24 Haiku failures in 199 questions, the exact savings at a given quality level are noisy (they swing between roughly 30% and 80%).
+- Oracle (perfect routing): 98% quality at 78% savings. Perfect routing beats always using Sonnet, because Haiku sometimes gets right what Sonnet gets wrong.
+
+**Learned**
+- Whether routing works depends on the cheap model: with a weak one, nothing works; with a strong one, routing pays off.
+- Rules written by hand encode assumptions that go stale when models change; a router trained on labels adapts.
+- My two scripts disagreed (AUC 0.675 vs 0.735) because one scaled the embeddings and one didn't. Training and evaluation must use exactly the same pipeline.
+- Caveat: Sonnet's everyday answers are assumed correct, so "always Sonnet" quality is slightly flattered.

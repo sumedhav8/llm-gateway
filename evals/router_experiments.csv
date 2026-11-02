@@ -1,0 +1,6 @@
+design,auc,saves_at_rules_quality,saves_with_3pct_loss,saves_with_5pct_loss
+"embeddings, C=1",0.7345,0.7234,0.6534,0.8213
+"embeddings, C=0.1",0.7295,0.7518,0.6716,0.8327
+"embeddings, C=0.01",0.724,0.7886,0.6246,0.8482
+simple features,0.4685,0.1842,0.1842,0.7869
+simple + embeddings,0.5867,0.6842,0.4941,0.6842

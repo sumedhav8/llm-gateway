@@ -23,6 +23,9 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
 
 from scripts.baseline_routers import rules_send_to_cheap
 from scripts.embed_questions import features_path
@@ -44,7 +47,9 @@ def load_training_data(labels_path):
 
 
 def make_model():
-    return LogisticRegression(max_iter=2000, C=1.0, class_weight="balanced")
+    # Same design that won in improve_router: scale each embedding number, then logistic regression.
+    return make_pipeline(StandardScaler(),
+                         LogisticRegression(max_iter=5000, C=1.0, class_weight="balanced"))
 
 
 def threshold_curve(items, probabilities):

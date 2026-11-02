@@ -8,8 +8,8 @@ from decimal import Decimal
 PRICES_PER_MILLION = {
     "llama3.2": (Decimal("0"), Decimal("0")),
     "llama3.2:1b": (Decimal("0"), Decimal("0")),
-    # TODO: confirm on the official Claude pricing page before relying on costs
     "claude-sonnet-5-5": (Decimal("2"), Decimal("10")),
+    "claude-haiku-5-5": (Decimal("0.10"), Decimal("0.50"))
 }
 
 ONE_MILLION = Decimal(1_000_000)

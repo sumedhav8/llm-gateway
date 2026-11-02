@@ -5,6 +5,7 @@ import pytest
 
 from app import embeddings
 from scripts import baseline_routers, routing_data
+from app.router_features import simple_features
 
 
 def make_items():
@@ -69,3 +70,43 @@ def test_embed_explains_when_ollama_is_off(monkeypatch):
     monkeypatch.setattr(embeddings, "EMBED_BASE_URL", "http://127.0.0.1:9/v1")
     with pytest.raises(embeddings.EmbeddingError, match="Is Ollama running"):
         embeddings.embed(["hello"])
+
+
+
+# --- Simple features (router day 4) ----------------------------------------------
+
+def test_simple_features_count_the_clues():
+    log_words, numbers, hard_words, question_marks = simple_features(
+        "Sara has 3 apples and buys 5 more. How many now?")
+    assert numbers == 2
+    assert hard_words == 1        # "how many"
+    assert question_marks == 1
+    assert log_words > 0
+
+
+
+# --- Paid cheap model and merging runs (Claude Haiku as the cheap tier) ----------
+
+def test_cheap_model_cost_is_counted():
+    items = make_items()
+    for item in items:
+        item["cheap_cost"] = 0.001
+    result = routing_data.evaluate(items, [True, True, False, False])
+    assert result["cost"] == pytest.approx(0.002 + 0.03 + 0.05)
+
+
+def test_merge_keeps_new_cheap_answers_and_reuses_strong_ones(tmp_path):
+    from scripts import merge_results
+
+    old = tmp_path / "old.jsonl"
+    new = tmp_path / "new.jsonl"
+    old.write_text("\n".join(json.dumps(r) for r in [
+        {"id": "q1", "tier": "cheap", "answer": "old cheap"},
+        {"id": "q1", "tier": "strong", "answer": "strong"},
+    ]), encoding="utf-8")
+    new.write_text(json.dumps({"id": "q1", "tier": "cheap", "answer": "new cheap"}), encoding="utf-8")
+
+    merged, missing = merge_results.merge(new, old)
+
+    assert [row["answer"] for row in merged] == ["new cheap", "strong"]
+    assert missing == []
