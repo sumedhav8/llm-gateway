@@ -149,20 +149,24 @@ def load_router():
     return _router_model
 
 
-def router_probability(question):
-    """The router's estimate that the cheap model will be good enough (0 to 1)."""
+def router_probability(question, vector=None):
+    """The router's estimate that the cheap model will be good enough (0 to 1).
+
+    Pass the question's embedding as vector if you already have it (the cache computes
+    one), so the gateway doesn't embed the same question twice.
+    """
     model = load_router()
-    try:
-        vector = embed([question])[0]
-    except EmbeddingError as exc:
-        raise RouterUnavailable(str(exc))
+    if vector is None:
+        try:
+            vector = embed([question])[0]
+        except EmbeddingError as exc:
+            raise RouterUnavailable(str(exc))
     return float(model.predict_proba([vector])[0][1])
 
-
-async def route_with_router(question, threshold=None):
+async def route_with_router(question, threshold=None, vector=None):
     threshold = ROUTER_THRESHOLD if threshold is None else threshold
     try:
-        probability = await asyncio.to_thread(router_probability, question)
+        probability = await asyncio.to_thread(router_probability, question, vector)
     except RouterUnavailable:
         # Without the router we can't predict, so use the cascade instead.
         result = await cascade(question)
@@ -178,8 +182,8 @@ async def route_with_router(question, threshold=None):
 
 # --- Entry point ---------------------------------------------------------------------
 
-async def answer_auto(question, mode=None):
+async def answer_auto(question, mode=None, vector=None):
     mode = mode or ROUTING_MODE
     if mode == "router":
-        return await route_with_router(question)
+        return await route_with_router(question, vector=vector)
     return await cascade(question)

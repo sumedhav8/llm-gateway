@@ -107,7 +107,7 @@ def test_both_models_down_raises(monkeypatch):
 
 def test_router_sends_easy_question_to_cheap(monkeypatch):
     calls = fake_models(monkeypatch)
-    monkeypatch.setattr(routing, "router_probability", lambda question: 0.9)
+    monkeypatch.setattr(routing, "router_probability", lambda question, vector=None: 0.9)
     result = run(routing.route_with_router("Capital of Japan?", threshold=0.5))
 
     assert result.route == "router-cheap"
@@ -117,7 +117,7 @@ def test_router_sends_easy_question_to_cheap(monkeypatch):
 
 def test_router_sends_hard_question_to_strong(monkeypatch):
     fake_models(monkeypatch)
-    monkeypatch.setattr(routing, "router_probability", lambda question: 0.2)
+    monkeypatch.setattr(routing, "router_probability", lambda question, vector=None: 0.2)
     result = run(routing.route_with_router("Hard question", threshold=0.5))
     assert result.route == "router-strong"
     assert result.answer == "strong answer"
@@ -126,7 +126,7 @@ def test_router_sends_hard_question_to_strong(monkeypatch):
 def test_router_unavailable_falls_back_to_cascade(monkeypatch):
     fake_models(monkeypatch, self_check="95")
 
-    def broken_router(question):
+    def broken_router(question, vector=None):
         raise routing.RouterUnavailable("Is Ollama running?")
 
     monkeypatch.setattr(routing, "router_probability", broken_router)
@@ -166,7 +166,7 @@ def test_mode_in_the_request_overrides_env(monkeypatch):
     monkeypatch.setattr(main.db, "log_request", lambda **row: None)
     fake_models(monkeypatch)
     monkeypatch.setattr(routing, "ROUTING_MODE", "cascade")
-    monkeypatch.setattr(routing, "router_probability", lambda question: 0.99)
+    monkeypatch.setattr(routing, "router_probability", lambda question, vector=None: 0.99)
     monkeypatch.setattr(routing, "ROUTER_THRESHOLD", 0.5)
 
     response = TestClient(main.app).post("/ask", json={"question": "Hi", "tier": "auto", "mode": "router"})
