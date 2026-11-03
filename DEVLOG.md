@@ -201,4 +201,5 @@ Tried it live
 - Same question again → hit.
 - "What's the capital city of France?" → hit (reused the France answer).
 - "What is the capital of Germany?" → miss (correctly not confused with France), answered and saved.
-
+- Cache hits cost $0 but took 3–4 s, about as long as a Haiku answer: the embedding is computed in Ollama on my laptop's CPU, which dominates the time. The database search itself is fast. A hosted embedding model would make hits near-instant.
+- The first request took 24 s (cold start: Ollama loading the embedding model and the gateway loading the router).
