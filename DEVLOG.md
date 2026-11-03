@@ -187,4 +187,18 @@ Learned
 
 Decision: switched the default to router mode (cascade stays as the automatic fallback when the router can't run).
 
-Next: semantic cache.
+## Nov 3 (later): Semantic cache, part 1
+
+What I did
+- Added a `cache` table in Postgres with pgvector: each answered question is saved with its 768-number embedding, plus an HNSW index for fast similarity search.
+- Added `app/cache.py`: find the most similar saved question (cosine similarity), save new answers, count hits. If the database is down, the cache just misses.
+- For `"tier": "auto"`, the gateway checks the cache first. A similarity of at least 0.95 returns the saved answer instantly (route `cache-hit`, $0, no model call).
+- The router reuses the cache's embedding, so each question is embedded only once.
+- Requests can skip the cache with `"use_cache": false`. Tests: 64 passed.
+
+Tried it live
+- "What is the capital of France?" → miss, answered and saved.
+- Same question again → hit.
+- "What's the capital city of France?" → hit (reused the France answer).
+- "What is the capital of Germany?" → miss (correctly not confused with France), answered and saved.
+
