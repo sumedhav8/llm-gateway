@@ -157,3 +157,20 @@ All 199 questions sent through the running gateway in each mode (4 at a time; 0 
 - **The cascade's live results matched the offline estimate** (94.0% quality, 43% savings), within about 4 questions.
 - **Escalation is slow:** escalated requests make three calls in a row (avg 11.5 s, p95 17 s).
 - **Local embeddings are a bottleneck:** the router's single call was slower than the cascade's two, because embeddings are computed in Ollama on a laptop CPU. A hosted embedding model would remove most of that delay.
+
+## Held-out test (the fair comparison)
+
+The router was trained on the main 199 questions, and the cascade threshold was chosen on them, so a fair test needs new questions. `scripts/build_holdout.py` picks 100 fresh ones (50 math, 50 everyday) from the same datasets, with zero overlap.
+
+| Strategy | Quality | Saves vs always Sonnet | Calls per question | p95 latency |
+|---|---|---|---|---|
+| Always Sonnet | 94.0% | 0% | 1 | n/a |
+| **Router (threshold 0.95)** | **94.0%** | **64%** | 1.00 | 13.1 s |
+| Cascade (threshold 85) | 94.0% | 46% | 2.24 | 16.4 s |
+| Always Haiku | 92.0% | 95% | 1 | n/a |
+| Oracle (perfect routing) | 97.0% | 84% | n/a | n/a |
+
+- **The router generalizes:** 64% savings on unseen questions, matching its cross-validated estimate (65%). The 79% seen in the main-set replay was data leakage.
+- **At equal quality, the router beats the cascade:** more savings, one call instead of 2.24, and a better worst case. The router is now the default; the cascade is the automatic fallback.
+- **The cheap model alone is a strong baseline here:** always Haiku was only 2 points (2 questions) below Sonnet. The benefit of routing grows with how often the cheap model fails.
+- With 100 questions, differences of 1–2 points are within noise.

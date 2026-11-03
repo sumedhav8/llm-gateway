@@ -159,3 +159,32 @@ Learned
 - Live testing shows things offline evaluation can't: latency, and bottlenecks like local embeddings.
 
 Next: build a held-out set of new questions to compare router and cascade fairly.
+
+## Nov 3: Held-out test set, a fair router vs cascade comparison
+
+What I did
+- Built `scripts/build_holdout.py`: 100 new questions (50 math, 50 everyday) from the same datasets, with zero overlap with the main set. Never used for training the router or choosing thresholds.
+- Answered them with Haiku and Sonnet, graded them (judge cost $0.12), and replayed both routing modes through the live gateway (0 errors).
+- Named the files `holdout_*` so training scripts never pick them up by accident.
+
+Results (100 held-out questions)
+| Strategy | Quality | Saves | Calls | p95 latency |
+|---|---|---|---|---|
+| Always Sonnet | 94.0% | 0% | 1 | n/a |
+| Router (threshold 0.95) | 94.0% | 64% | 1.00 | 13.1 s |
+| Cascade (threshold 85) | 94.0% | 46% | 2.24 | 16.4 s |
+| Always Haiku | 92.0% | 95% | 1 | n/a |
+| Oracle | 97.0% | 84% | n/a | n/a |
+
+- Haiku was good enough on 92/100 and beat Sonnet at math (46/50 vs 44/50).
+- The router saved 64% on unseen questions, matching its cross-validated estimate (65%). Yesterday's 79% was leakage; cross-validation was the honest number.
+- At equal quality, the router beat the cascade on cost, number of calls and worst-case latency.
+- Always Haiku was only 2 points below (2 questions), so on easy questions like these, routing adds little over the cheap model alone.
+
+Learned
+- A held-out set is the only fair test. Cross-validation predicted it well; testing on training data didn't.
+- The value of routing depends on how often the cheap model fails. When it rarely fails, the cheap model alone is a strong baseline.
+
+Decision: switched the default to router mode (cascade stays as the automatic fallback when the router can't run).
+
+Next: semantic cache.
