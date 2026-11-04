@@ -224,3 +224,8 @@ Learned
 
 Decision: semantic cache switched off (`CACHE_ENABLED=false`) until it has a verifier.
 
+Tried it live
+- Exact repeats (France, Germany): `cache-exact`, 0 calls, 0.2–0.6 s. Yesterday's semantic hits took 3–4 s; the exact layer skips the embedding.
+- "Which city is the capital of France?": `cache-verified` (similarity 0.986, Haiku said YES), $0.000057, 6.8 s.
+- "Capital of Spain": similarity 0.84, below 0.86, so no verifier; answered by Haiku via the router, $0.000010.
+- For very short questions, the verifier check ($0.000057) costs more than answering with Haiku ($0.000010). The verifier pays off when the answer would be long or would go to Sonnet.
