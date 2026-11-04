@@ -13,6 +13,7 @@ and nothing is saved, but questions are still answered.
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 
 import psycopg
@@ -33,6 +34,22 @@ class CachedAnswer:
     answer: str
     model: str
     similarity: float
+
+NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+
+
+def numbers_in(text):
+    """All the numbers in a question, in order ('1,200' counts as 1200)."""
+    return [float(n) for n in NUMBER_RE.findall(text.replace(",", ""))]
+
+
+def same_numbers(question_a, question_b):
+    """True when both questions contain exactly the same numbers.
+
+    Embeddings barely notice a changed number ("3 apples" vs "4 apples"), but the answer
+    changes completely, so a cache hit is only safe if the numbers match.
+    """
+    return sorted(numbers_in(question_a)) == sorted(numbers_in(question_b))
 
 
 def to_pgvector(vector):
