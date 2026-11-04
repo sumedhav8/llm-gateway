@@ -203,3 +203,24 @@ Tried it live
 - "What is the capital of Germany?" → miss (correctly not confused with France), answered and saved.
 - Cache hits cost $0 but took 3–4 s, about as long as a Haiku answer: the embedding is computed in Ollama on my laptop's CPU, which dominates the time. The database search itself is fast. A hosted embedding model would make hits near-instant.
 - The first request took 24 s (cold start: Ollama loading the embedding model and the gateway loading the router).
+
+## Nov 4: Choosing the cache threshold from data (no threshold is safe)
+
+What I did
+- `scripts/make_cache_pairs.py`: Sonnet wrote a paraphrase (same answer) and a look-alike (one detail changed, different answer) for 60 main-set questions; 59 were usable (cost about $0.10).
+- Spot-checked 10 pairs by hand: 10/10 correct.
+- `scripts/eval_cache.py`: filled a pretend cache with the originals, looked up every paraphrase and look-alike, and swept the threshold from 0.70 to 1.00. Also tested a "same numbers" rule (`app/cache.py`).
+- Tests: 68 passed.
+
+Results
+- Median similarity to the original: math paraphrases 0.969, math look-alikes 0.999; everyday paraphrases 0.951, everyday look-alikes 0.939.
+- Look-alikes are often MORE similar than paraphrases: changing one number keeps every word, while rewording changes many words.
+- No threshold works. At 0.98 the cache catches only 15% of paraphrases but still serves 56% of look-alikes. Five look-alikes scored 1.000.
+- The same-numbers rule halves wrong hits (at 0.90: 85% → 37%), but blocks paraphrases that write numbers as words ("two hours" vs "2 hours") and misses changes written in words.
+
+Learned
+- Embeddings measure topic, not answer. "3 apples" and "4 apples" look identical to an embedding but need different answers.
+- A cache that returns an answer to a different question is worse than no cache. Measuring wrong hits matters more than measuring hit rate.
+
+Decision: semantic cache switched off (`CACHE_ENABLED=false`) until it has a verifier.
+

@@ -174,3 +174,18 @@ The router was trained on the main 199 questions, and the cascade threshold was 
 - **At equal quality, the router beats the cascade:** more savings, one call instead of 2.24, and a better worst case. The router is now the default; the cascade is the automatic fallback.
 - **The cheap model alone is a strong baseline here:** always Haiku was only 2 points (2 questions) below Sonnet. The benefit of routing grows with how often the cheap model fails.
 - With 100 questions, differences of 1–2 points are within noise.
+
+## Semantic cache: why a similarity threshold isn't enough
+
+To choose the cache threshold from data, Sonnet wrote a paraphrase (same answer) and a look-alike (one detail changed, so the answer differs) for 59 questions; 10 were spot-checked by hand (10/10 correct). Each was looked up against a cache of the originals.
+
+| Median similarity to the original | Math | Everyday |
+|---|---|---|
+| Paraphrase (should be served) | 0.969 | 0.951 |
+| Look-alike (must not be served) | **0.999** | 0.939 |
+
+- **No threshold is safe.** At 0.98 the cache catches only 15% of paraphrases but serves 56% of look-alikes. Changing one number leaves every other word in place, so the embedding barely moves.
+- **A "same numbers" rule halves wrong hits** (85% → 37% at 0.90), but it blocks paraphrases that write numbers as words and can't see changes written in words.
+- **Embeddings measure topic, not answer.** The semantic cache is off by default until it has a verifier that checks whether two questions really have the same answer.
+
+![Cache threshold](evals/cache_threshold.png)
