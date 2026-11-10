@@ -20,12 +20,17 @@ class EmbeddingError(Exception):
     pass
 
 
-def embed(texts, batch_size=32, timeout=120):
-    """Return one embedding (a list of floats) per text, in the same order."""
+def embed(texts, batch_size=32, timeout=120, prefix=None):
+    """Return one embedding (a list of floats) per text, in the same order.
+
+    prefix overrides EMBED_PREFIX: RAG uses "search_document: " for document chunks and
+    "search_query: " for questions, as nomic-embed-text recommends for search.
+    """
+    prefix = EMBED_PREFIX if prefix is None else prefix
     vectors = []
     with httpx.Client(timeout=timeout) as client:
         for start in range(0, len(texts), batch_size):
-            batch = [EMBED_PREFIX + text for text in texts[start:start + batch_size]]
+            batch = [prefix + text for text in texts[start:start + batch_size]]
             try:
                 response = client.post(
                     f"{EMBED_BASE_URL}/embeddings",
