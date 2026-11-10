@@ -9,10 +9,6 @@ A smart gateway that sits between an app and AI models and cuts LLM costs by:
 - **Checking quality** and falling back to a stronger model when a cheap answer looks wrong
 - **Tracking** cost, speed and quality on a live dashboard
 
-## Status
-
-Work in progress. Building step by step, with the results measured at each stage.
-
 ## Tech stack
 
 Python, FastAPI, Ollama (local model), Postgres + pgvector, scikit-learn, Streamlit, Docker
@@ -189,3 +185,15 @@ To choose the cache threshold from data, Sonnet wrote a paraphrase (same answer)
 - **Embeddings measure topic, not answer.** The semantic cache is off by default until it has a verifier that checks whether two questions really have the same answer.
 
 ![Cache threshold](evals/cache_threshold.png)
+
+## RAG demo, part 1: retrieval
+
+The project's own README and DEVLOG are split into 49 heading-aware chunks (about 620 characters each) and stored in pgvector. On 40 Haiku-written questions (spot-checked):
+
+| recall@1 | recall@3 | recall@5 | MRR |
+|---|---|---|---|
+| 40% | 65% | 72% | 0.56 |
+
+- The right chunk is in the top 5 for about 7 in 10 questions. Because the README and DEVLOG repeat many facts, "the exact chunk" undercounts correct finds.
+- nomic-embed-text's search prefixes made no measurable difference here.
+- Misses are mostly vocabulary gaps ("new questions" vs "held-out") and broad questions; hybrid keyword + embedding search is next.

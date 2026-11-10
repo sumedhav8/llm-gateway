@@ -1,0 +1,4 @@
+setup,recall@1,recall@3,recall@5,mrr
+search_document / search_query,0.4,0.65,0.725,0.5645292207792207
+classification (like the router),0.425,0.625,0.725,0.5627013482160541
+no prefix,0.4,0.625,0.725,0.5566590920044867
