@@ -229,3 +229,22 @@ Tried it live
 - "Which city is the capital of France?": `cache-verified` (similarity 0.986, Haiku said YES), $0.000057, 6.8 s.
 - "Capital of Spain": similarity 0.84, below 0.86, so no verifier; answered by Haiku via the router, $0.000010.
 - For very short questions, the verifier check ($0.000057) costs more than answering with Haiku ($0.000010). The verifier pays off when the answer would be long or would go to Sonnet.
+
+## Nov 9: Cache safety
+
+What I did
+- Time-sensitive and personal questions are never cached (not reused, not saved): a word rule for "today", "tomorrow", "now", "latest", "weather", "my", "are you"... Responses say why with `cache_skipped`.
+- Questions with 2+ numbers count as self-contained (math word problems), so story words like "today" don't block them.
+- 7-day expiry (`CACHE_TTL_HOURS=168`): older saved answers are ignored.
+- Warm-up at startup: the embedding model and router load in the background when the gateway starts.
+- `scripts/check_cacheable.py` measures how many real questions the rule refuses. Tests: 90 passed.
+
+Results
+- First version refused 6–7% of real questions, mostly false alarms in math word problems ("Last year there were 50 students...").
+- With the 2+ numbers exemption: 2% (main set) and 4% (held-out set). What's left is genuinely personal ("why my laptop won't start?") or time-dependent ("walk today").
+- The look-alike the verifier let through last time ("Are you going for a walk tomorrow?") is now refused.
+- Known gaps: "Eve... now has only a quarter" is still refused (numbers written as words); a time-dependent question with 2+ numbers ("weather in 10 days at 3 pm") would be cacheable, limited by the 7-day expiry.
+- First request after warm-up: 10192 ms (was about 24 s before).
+
+Learned
+- A safety rule should be measured like a model: count its false alarms on real data, not only whether it catches the bad case.
