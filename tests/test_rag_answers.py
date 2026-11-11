@@ -82,7 +82,7 @@ def test_rag_endpoint_returns_answer_and_cited_sources(monkeypatch):
     assert [s["cited"] for s in data["sources"]] == [True, False]
     assert data["sources"][0]["source"] == "README.md"
     assert data["cost_usd"] > 0
-    assert logged[0]["route"] == "rag-hybrid"
+    assert logged[0]["route"] == "rag-vector"
 
 
 def test_rag_endpoint_reports_not_found(monkeypatch):

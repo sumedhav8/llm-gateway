@@ -24,8 +24,7 @@
 ## Oct 26: Two model tiers and a test question set
 - The gateway now supports a cheap model (local llama) and a strong model (Claude), chosen per request.
 - Built a batch runner that sends a set of test questions to one or both models and saves the results.
-- Finding: [which questions llama got right and wrong, e.g. "llama got X of 5 math questions right and missed the 'two coins' trick question"]
-
+- Finding: on 20 sample questions, llama3.2:1b got 13/14 checkable questions right, and Claude got 14/14.
 ## Oct 27: Claude added as the strong model
 - Built: connected Claude (claude-sonnet-5-5) as the strong tier, confirmed its pricing, and wrote a script that compares both models side by side.
 - Problem: I accidentally pasted my API key into a chat → disabled it and created a new one. Lesson: keys only ever go in .env.
@@ -248,3 +247,48 @@ Results
 
 Learned
 - A safety rule should be measured like a model: count its false alarms on real data, not only whether it catches the bad case.
+
+## Nov 10 (later): RAG, part 2: hybrid search and cited answers
+
+**What I did**
+- Hybrid search: Postgres full-text keyword search (`db/005_rag_keywords.sql`) plus embeddings, merged with Reciprocal Rank Fusion (RRF, k = 60).
+- `POST /rag/ask`: retrieves 4 chunks, numbers them [1]–[4], and Haiku answers only from them with citations, or says "I don't know based on the project documents".
+- `scripts/eval_hybrid.py` compares retrieval methods; `scripts/eval_rag.py` has Sonnet judge each answer as CORRECT and GROUNDED (about $0.20 a run).
+- Made vector search the default after the evaluation. Tests: 109 passed.
+
+**A stale test set nearly fooled me**
+- Editing the README and DEVLOG shifted chunk numbers, so saved test questions pointed at the wrong chunks: vector recall@5 looked like 60% (some ranks 25+ of 49), and hybrid looked better.
+- After regenerating the questions: vector recall@5 85%, and the hybrid result flipped. A test set has to be regenerated whenever the documents it tests change.
+
+**Results (40 fresh questions)**
+| Retrieval | recall@5 | Correct answers | Grounded |
+|---|---|---|---|
+| Vector | 85% | 85% | 88% |
+| Hybrid (two runs) | 80% | 72% / 75% | 90% / 95% |
+| Keyword only | 68% | n/a | n/a |
+
+- Answer quality tracks retrieval: when the right chunk is found, the answer is almost always right.
+- Hybrid didn't help here. The test questions were written to avoid the docs' exact words, which favors embeddings, and these docs are explanations rather than exact codes or names. With equal weights in RRF, the weaker keyword list pulled wrong chunks up.
+- Two hybrid runs differed by 3 points: model answers vary between runs, so small differences are noise.
+- Worst failure: borrowing a number from a neighbouring chunk (for example 98% from the oracle line), which sounds right but isn't.
+- The README holds both old (llama-era) and new conclusions, so old sections can produce outdated answers.
+- Cost: about $0.0003 per answer with Haiku.
+
+**Tried it live**
+- Plain `/ask`: "How much did the router save?" → Haiku had no idea what router I meant; "What is the capital of France?" → "Paris".
+- `/rag/ask`: "How much did the router save on the held-out test?" → "64% at the same 94.0% quality [1][4], matching the cross-validated 65% [2][3]" ($0.0002, 3.7 s).
+- `/rag/ask`: "...on new questions?" → missed the held-out sections (the docs say "held-out", not "new") but stayed honest: it said the sources don't give a valid figure instead of inventing one.
+- `/rag/ask`: "What is the capital of France?" → "I don't know based on the project documents", even though three retrieved chunks mention France.
+
+**Problems I hit**
+- Deleted the `tier` line by accident while editing `RagRequest`, which broke the endpoint (3 failing tests). Check the lines around every edit.
+- Two gateways were running at once, so requests reached the old code (500 error). Stopped all Python processes and started one.
+
+**Learned**
+- Retrieval quality decides answer quality.
+- A test set must stay in sync with its documents, or it measures the wrong thing.
+- Wording matters: query rewriting or adding synonyms to the docs would catch "new" vs "held-out".
+
+**Decision:** vector search is the default for `/rag/ask`; hybrid stays available as an option.
+
+**Next:** reliability (retries, fallbacks, timeouts, rate limiting).

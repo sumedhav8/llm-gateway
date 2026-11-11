@@ -258,7 +258,7 @@ async def ask(req: AskRequest):
 class RagRequest(BaseModel):
     question: str
     k: int = Field(4, ge=1, le=10)                              # how many chunks to retrieve
-    method: Literal["hybrid", "vector", "keyword"] = "hybrid"   # how to find them
+    method: Literal["hybrid", "vector", "keyword"] = "vector"   # how to find them (vector won the eval)    tier: Literal["cheap", "strong"] = "cheap"                  # which model writes the answer
     tier: Literal["cheap", "strong"] = "cheap"                  # which model writes the answer
 
 

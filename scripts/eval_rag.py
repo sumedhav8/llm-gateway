@@ -119,7 +119,7 @@ async def run(questions, k, method):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--method", choices=["hybrid", "vector", "keyword"], default="hybrid")
+    parser.add_argument("--method", choices=["hybrid", "vector", "keyword"], default="vector")
     parser.add_argument("--k", type=int, default=4, help="Chunks given to the model")
     args = parser.parse_args()
 

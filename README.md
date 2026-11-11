@@ -70,8 +70,7 @@ On 200 questions (100 GSM8K math, 100 Dolly everyday requests):
 ![Cost saved vs. answer quality](evals/cost_vs_quality.png)
 
 - Approach: logistic regression on question embeddings (nomic-embed-text), scored with 5-fold cross-validation on 200 labeled questions.
-- Result: cross-validated ROC AUC of **[AUC]**, so the trained router does **not yet beat random routing**. At about 40% cost saved, it gives about 65% good answers, versus about 69% for random.
-- Baselines:
+   - Result: cross-validated ROC AUC of **about 0.45**, so the trained router does **not yet beat random routing**. ...- Baselines:
   - Always strong: about 95% good answers at full cost
   - Random: saves about 41% at about 69% good answers
   - Hand-written rules: saves about **56%** at about **68%** good answers, the best practical strategy so far
@@ -197,3 +196,28 @@ The project's own README and DEVLOG are split into 49 heading-aware chunks (abou
 - The right chunk is in the top 5 for about 7 in 10 questions. Because the README and DEVLOG repeat many facts, "the exact chunk" undercounts correct finds.
 - nomic-embed-text's search prefixes made no measurable difference here.
 - Misses are mostly vocabulary gaps ("new questions" vs "held-out") and broad questions; hybrid keyword + embedding search is next.
+
+## RAG demo: ask the project about itself
+
+`POST /rag/ask` answers questions about this project from its own README and DEVLOG. The docs are split into heading-aware chunks (about 600 characters each) stored in pgvector; for each question, the 4 most relevant chunks are retrieved, and Haiku answers only from them, citing sources like [1], or replies "I don't know based on the project documents".
+
+**Without RAG vs with RAG**
+| Question | Plain `/ask` (Haiku alone) | `/rag/ask` |
+|---|---|---|
+| How much did the router save on the held-out test? | "I don't have any context about a router" | "64% at the same 94.0% quality [1][4], matching the cross-validated 65% [2][3]" |
+| What is the capital of France? | "Paris" | "I don't know based on the project documents." |
+
+**Measured on 40 questions** written by Haiku from the docs (spot-checked), judged by Sonnet:
+
+| Retrieval | Right chunk in top 5 | Correct answers | Grounded (nothing made up) |
+|---|---|---|---|
+| **Embeddings (default)** | **85%** | **85%** | 88% |
+| Hybrid (embeddings + keywords, RRF) | 80% | 72–75% | 90–95% |
+| Keywords only | 68% | n/a | n/a |
+
+- **Answer quality follows retrieval quality:** most wrong answers happened when the right chunk wasn't found.
+- **Hybrid search didn't help here.** The test questions were written to paraphrase the docs (avoiding their exact words), which favors embeddings; hybrid search is likely to help more for questions that use exact terms like setting names or route names.
+- **Wording matters:** asking about "new questions" instead of "held-out" misses the right sections. Query rewriting or adding synonyms to the docs would fix this.
+- **Main remaining failure:** borrowing a number from a neighbouring chunk. About 1 in 10 answers included something not in its sources.
+- **A test set must match its documents:** editing the docs shifted chunk numbers and made an early test set grade answers against the wrong passages, until it was regenerated.
+- Cost: about $0.0003 per answer, under 5 seconds.

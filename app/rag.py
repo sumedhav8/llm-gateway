@@ -252,12 +252,12 @@ def hybrid_search(question, k=4, candidates=20):
     return rrf_merge(search(question, k=candidates), keyword_search(question, k=candidates), k=k)
 
 
-def retrieve(question, k=4, method="hybrid"):
-    if method == "vector":
-        return search(question, k=k)
+def retrieve(question, k=4, method="vector"):
     if method == "keyword":
         return keyword_search(question, k=k)
-    return hybrid_search(question, k=k)
+    if method == "hybrid":
+        return hybrid_search(question, k=k)
+    return search(question, k=k)
 
 
 # --- Part 2b. Answering with citations ------------------------------------------------
@@ -310,7 +310,7 @@ class RagAnswer:
     cost_usd: object = None
 
 
-async def answer(question, k=4, method="hybrid", tier="cheap"):
+async def answer(question, k=4, method="vector", tier="cheap"):
     """Retrieve k chunks, then have a model answer from them, citing its sources."""
     hits = await asyncio.to_thread(retrieve, question, k, method)
     model = config.MODELS[tier]
