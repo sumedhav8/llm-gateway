@@ -221,3 +221,11 @@ The project's own README and DEVLOG are split into 49 heading-aware chunks (abou
 - **Main remaining failure:** borrowing a number from a neighbouring chunk. About 1 in 10 answers included something not in its sources.
 - **A test set must match its documents:** editing the docs shifted chunk numbers and made an early test set grade answers against the wrong passages, until it was regenerated.
 - Cost: about $0.0003 per answer, under 5 seconds.
+
+## Reliability
+
+- **Retries with backoff:** temporary failures (rate limited, overloaded, server errors, dropped connections) are retried up to 2 times with exponential backoff and jitter, honoring the provider's `Retry-After`. Permanent errors (wrong key, unknown model, bad request) fail immediately.
+- **Timeouts:** 5 s to connect, 60 s for an answer; timeouts aren't retried.
+- **Fallbacks:** if the routed model fails, the other model answers (`router-cheap-failed-strong`); the cascade already falls back both ways. Answers given by Haiku in place of Sonnet are never cached.
+- **Rate limiting:** 30 requests per minute per client (sliding window), with `429 Too Many Requests` and `Retry-After`. In memory, so it covers one gateway process; multiple servers would need a shared store such as Redis.
+- **Tested by simulation:** 13 tests fake rate limits, outages, dropped connections and timeouts. Live check: with the cheap model deliberately broken, requests still succeeded through Sonnet.

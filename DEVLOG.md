@@ -292,3 +292,27 @@ Learned
 **Decision:** vector search is the default for `/rag/ask`; hybrid stays available as an option.
 
 **Next:** reliability (retries, fallbacks, timeouts, rate limiting).
+
+## Nov 12: Reliability
+
+What I did
+- Retries in `app/models.py`: temporary failures (429 rate limited, 529 overloaded, 5xx, dropped connections) are retried up to 2 times with exponential backoff and jitter (about 0.5 s, then 1 s), or as long as the provider's Retry-After header says.
+- No retries for permanent errors (401 wrong key, 404 unknown model, 400 bad request): they fail at once with a clear message.
+- Timeouts: 5 s to connect, 60 s for an answer (was 120 s). Timeouts are not retried.
+- Router fallback: if the chosen model fails even after retries, the other model answers (route `router-cheap-failed-strong` or `router-strong-failed-cheap`). Answers from Haiku standing in for Sonnet are never cached.
+- Rate limiting (`app/limits.py`): at most 30 requests per minute per client (by X-Client-Id header or IP), sliding window; over the limit returns 429 with Retry-After.
+- 13 tests that simulate failures (retries, Retry-After, give-up, timeouts, fallback both ways, the limiter). Tests: 122 passed.
+
+Tried it live
+- Rate limit set to 3: the 4th request within a minute got 429 with `retry-after: 31`. Requests spaced about 25 s apart were all allowed, because each one leaves the 60-second sliding window.
+- Broken cheap model name: "What is the capital of Italy?" still answered by Sonnet, route `router-cheap-failed-strong`, 2 calls, 5.5 s. The 404 wasn't retried.
+
+Problems I hit
+- `NameError: Depends` after missing one import edit.
+- The rate limit seemed broken at first: an old uvicorn process without the new code was still answering. Check `netstat` before starting the gateway.
+
+Learned
+- Retry only what can fix itself; retrying a wrong key or model name just wastes time.
+- A fallback answer is fine to send but not to cache.
+- The in-memory rate limiter works for one gateway process; several servers would need a shared store like Redis.
+
