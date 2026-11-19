@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage LLM Gateway</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --border: #dfe3ea;
+    --accent: #2f6fde; --accent-soft: #e8f0fd; --good: #1f8a4c; --good-soft: #e5f5ec;
+    --warn: #a35d00; --warn-soft: #fdf1e1; --bad: #b42318; --bad-soft: #fdecea;
+    --cache: #6b3fc4; --cache-soft: #f0eafc; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --text: #e7eaf0; --muted: #9aa3b2; --border: #2c3340;
+      --accent: #7aa7ff; --accent-soft: #1f2b43; --good: #5fd08f; --good-soft: #17301f;
+      --warn: #f0b35e; --warn-soft: #3a2a14; --bad: #ff8a80; --bad-soft: #3b1d1b;
+      --cache: #b89cff; --cache-soft: #2a2140; --on-accent: #0d1320;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 140px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 16px; color: var(--muted); }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+         padding: 8px 14px; border-radius: 999px; cursor: pointer; font: inherit; }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .stat .label { font-size: 12px; color: var(--muted); }
+  .stat .value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+
+  .hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .example { border: 1px dashed var(--border); background: transparent; color: var(--muted);
+             border-radius: 999px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+  .example:hover { color: var(--text); border-color: var(--accent); }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; margin-bottom: 12px; }
+  .question { font-weight: 600; margin-bottom: 8px; }
+  .answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .badge.good { background: var(--good-soft); color: var(--good); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.cache { background: var(--cache-soft); color: var(--cache); }
+  .why { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .error { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+  .pending { color: var(--muted); }
+
+  .sources { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .sources summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  .source { font-size: 13px; margin-top: 6px; padding-left: 8px; border-left: 3px solid var(--border); }
+  .source.cited { border-left-color: var(--good); }
+  .source .excerpt { color: var(--muted); white-space: pre-wrap; }
+
+  form.ask { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg);
+             border-top: 1px solid var(--border); padding: 12px 16px; }
+  form.ask .row { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; }
+  form.ask textarea { flex: 1; resize: none; min-height: 46px; max-height: 140px; padding: 10px 12px;
+                      border-radius: 10px; border: 1px solid var(--border); background: var(--panel);
+                      color: var(--text); font: inherit; }
+  form.ask button { padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent);
+                    color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
+  form.ask button:disabled { opacity: 0.5; cursor: wait; }
+  .options { max-width: 860px; margin: 6px auto 0; display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+  .options select { font: inherit; font-size: 13px; background: var(--panel); color: var(--text);
+                    border: 1px solid var(--border); border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Triage LLM Gateway</h1>
+    <p>Ask anything. The gateway picks the cheapest model that can answer well, reuses answers it has
+       already given, and shows what each answer cost.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="ask">Ask anything</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="docs">Ask about this project</button>
+  </div>
+
+  <section class="summary" aria-label="This session">
+    <div class="stat"><div class="label">Questions</div><div class="value" id="s-count">0</div></div>
+    <div class="stat"><div class="label">You paid</div><div class="value" id="s-paid">$0</div></div>
+    <div class="stat"><div class="label">Always Sonnet (est.)</div><div class="value" id="s-sonnet">$0</div></div>
+    <div class="stat"><div class="label">Saved</div><div class="value" id="s-saved">–</div></div>
+  </section>
+
+  <p class="hint" id="hint"></p>
+  <div class="examples" id="examples"></div>
+  <div id="log" aria-live="polite"></div>
+</div>
+
+<form class="ask" id="form">
+  <div class="row">
+    <textarea id="question" rows="1" placeholder="Type a question and press Enter" required></textarea>
+    <button id="send" type="submit">Ask</button>
+  </div>
+  <div class="options" id="options">
+    <label>Routing
+      <select id="mode">
+        <option value="">server default</option>
+        <option value="router">router</option>
+        <option value="cascade">cascade</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="use-cache" checked> use the cache</label>
+  </div>
+</form>
+
+<script>
+"use strict";
+
+const EXAMPLES = {
+  ask: ["What is the capital of France?", "Which city is the capital of France?",
+        "A pen costs $3. How much do 7 pens cost?", "Write a haiku about rain."],
+  docs: ["How much did the router save on the held-out test?", "Why was the semantic cache turned off at first?",
+         "What happens when the cheap model is broken?", "What is the capital of France?"],
+};
+const HINTS = {
+  ask: "Questions go through the gateway: cache first, then Haiku or Sonnet. Try asking the same thing twice, or in other words.",
+  docs: "Answers come only from this project's README and DEVLOG, with sources. Questions they can't answer get \"I don't know\".",
+};
+
+// What each route means, in plain words
+function explainRoute(route) {
+  const plain = {
+    "cache-exact": "Asked before word for word, so the saved answer was reused. No model was called.",
+    "cache-verified": "A very similar question was answered before; Haiku confirmed both have the same answer, so it was reused.",
+    "cache-similar": "A very similar question was answered before, so its answer was reused.",
+    "router-cheap": "The router predicted Haiku could answer this well, so the cheap model answered.",
+    "router-strong": "The router predicted this needs the stronger model, so Sonnet answered.",
+    "cascade-accepted": "Haiku answered and was confident in its answer, so Sonnet wasn't needed.",
+    "cascade-escalated": "Haiku answered but wasn't confident, so Sonnet answered instead.",
+    "router-cheap-failed-strong": "Haiku was chosen but failed, so Sonnet answered instead.",
+    "router-strong-failed-cheap": "Sonnet was chosen but failed, so Haiku answered instead.",
+    "cascade-cheap-failed": "Haiku failed, so Sonnet answered.",
+    "cascade-escalation-failed": "Haiku wasn't confident, but Sonnet was unavailable, so Haiku's answer was used.",
+  };
+  if (plain[route]) return plain[route];
+  if (route && route.startsWith("router-unavailable-")) {
+    return "The router couldn't run, so the cascade decided instead. " + (plain[route.slice(19)] || "");
+  }
+  return "";
+}
+
+const state = { tab: "ask", count: 0, paid: 0, sonnet: 0, prices: null };
+const $ = (id) => document.getElementById(id);
+
+function money(x) {
+  if (x === null || x === undefined) return "?";
+  if (x === 0) return "$0";
+  return x < 0.01 ? "$" + x.toFixed(5) : "$" + x.toFixed(4);
+}
+
+// Rough estimate of what Sonnet would have charged: about 4 characters per token
+function sonnetEstimate(inputText, outputText, inputTokens, outputTokens) {
+  if (!state.prices || state.prices.input === null) return null;
+  const tin = inputTokens || Math.ceil(inputText.length / 4);
+  const tout = outputTokens || Math.ceil(outputText.length / 4);
+  return (tin * state.prices.input + tout * state.prices.output) / 1e6;
+}
+
+function updateSummary() {
+  $("s-count").textContent = state.count;
+  $("s-paid").textContent = money(state.paid);
+  $("s-sonnet").textContent = money(state.sonnet);
+  $("s-saved").textContent = state.sonnet > 0
+    ? Math.max(0, Math.round((1 - state.paid / state.sonnet) * 100)) + "%" : "–";
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// Show **bold** from model answers without trusting the text as HTML
+function setAnswerText(node, text) {
+  node.textContent = "";
+  text.split(/(\*\*[^*]+\*\*)/g).forEach((part) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      node.appendChild(el("strong", "", part.slice(2, -2)));
+    } else if (part) {
+      node.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
+function badge(text, kind) { return el("span", "badge" + (kind ? " " + kind : ""), text); }
+
+function modelName(name) {
+  if (!name) return "?";
+  if (name.includes("haiku")) return "Claude Haiku";
+  if (name.includes("sonnet")) return "Claude Sonnet";
+  return name;
+}
+
+function renderAsk(card, question, data) {
+  const answer = el("div", "answer");
+  setAnswerText(answer, data.answer);
+  card.appendChild(answer);
+
+  const badges = el("div", "badges");
+  if (data.cached) badges.appendChild(badge("from cache", "cache"));
+  badges.appendChild(badge(modelName(data.model), data.tier === "strong" ? "warn" : "good"));
+  badges.appendChild(badge("cost " + money(data.cost_usd)));
+  badges.appendChild(badge((data.latency_ms / 1000).toFixed(1) + " s"));
+  badges.appendChild(badge(data.calls + (data.calls === 1 ? " model call" : " model calls")));
+  if (data.similarity !== null && data.similarity !== undefined && data.cached) {
+    badges.appendChild(badge("similarity " + data.similarity.toFixed(3), "cache"));
+  }
+  if (data.cache_skipped) badges.appendChild(badge("not cached: " + data.cache_skipped, "warn"));
+  card.appendChild(badges);
+
+  const reasons = [explainRoute(data.route)];
+  if (data.cached && data.cached_question && data.cached_question !== question) {
+    reasons.push("Reused the answer to: \"" + data.cached_question + "\"");
+  }
+  if (data.cache_skipped) {
+    reasons.push("Answers to " + data.cache_skipped + " questions are never reused.");
+  }
+  const why = el("div", "why", reasons.filter(Boolean).join(" "));
+  card.appendChild(why);
+
+  const estimate = sonnetEstimate(question, data.answer, data.cached ? 0 : data.input_tokens,
+                                  data.cached ? 0 : data.output_tokens);
+  return { paid: data.cost_usd || 0, sonnet: estimate || 0 };
+}
+
+function renderDocs(card, question, data) {
+  const answer = el("div", "answer");
+  setAnswerText(answer, data.answer);
+  card.appendChild(answer);
+
+  const badges = el("div", "badges");
+  badges.appendChild(badge(data.not_found ? "not in the documents" : "answered from the documents",
+                           data.not_found ? "warn" : "good"));
+  badges.appendChild(badge(modelName(data.model)));
+  badges.appendChild(badge("cost " + money(data.cost_usd)));
+  badges.appendChild(badge((data.latency_ms / 1000).toFixed(1) + " s"));
+  card.appendChild(badges);
+
+  const sources = el("details", "sources");
+  const cited = data.sources.filter((s) => s.cited).length;
+  sources.appendChild(el("summary", "", data.sources.length + " sources retrieved, " + cited + " cited"));
+  data.sources.forEach((s) => {
+    const item = el("div", "source" + (s.cited ? " cited" : ""));
+    item.appendChild(el("div", "", "[" + s.number + "] " + s.source + " › " + s.heading + (s.cited ? "  (cited)" : "")));
+    item.appendChild(el("div", "excerpt", s.excerpt));
+    sources.appendChild(item);
+  });
+  card.appendChild(sources);
+
+  // The question and sources are the input; Sonnet would have read the same prompt
+  const estimate = sonnetEstimate("", data.answer, data.input_tokens, data.output_tokens);
+  return { paid: data.cost_usd || 0, sonnet: estimate || 0 };
+}
+
+async function ask(question) {
+  const card = el("div", "card");
+  card.appendChild(el("div", "question", question));
+  const pending = el("div", "pending", "Thinking...");
+  card.appendChild(pending);
+  $("log").prepend(card);
+
+  const docs = state.tab === "docs";
+  const body = docs ? { question } : { question, tier: "auto", use_cache: $("use-cache").checked };
+  if (!docs && $("mode").value) body.mode = $("mode").value;
+
+  try {
+    const response = await fetch(docs ? "/rag/ask" : "/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    pending.remove();
+    if (!response.ok) {
+      card.classList.add("error");
+      let message = typeof data.detail === "string" ? data.detail : "Something went wrong (" + response.status + ").";
+      if (response.status === 429) message = "Slow down: " + message;
+      card.appendChild(el("div", "answer", message));
+      return;
+    }
+    const totals = docs ? renderDocs(card, question, data) : renderAsk(card, question, data);
+    state.count += 1;
+    state.paid += totals.paid;
+    state.sonnet += totals.sonnet;
+    updateSummary();
+  } catch (error) {
+    pending.remove();
+    card.classList.add("error");
+    card.appendChild(el("div", "answer", "Couldn't reach the gateway. Is it running?"));
+  }
+}
+
+function selectTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  $("hint").textContent = HINTS[tab];
+  $("options").style.visibility = tab === "ask" ? "visible" : "hidden";
+  const examples = $("examples");
+  examples.textContent = "";
+  EXAMPLES[tab].forEach((text) => {
+    const button = el("button", "example", text);
+    button.type = "button";
+    button.addEventListener("click", () => { $("question").value = text; $("question").focus(); });
+    examples.appendChild(button);
+  });
+}
+
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
+
+$("form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const question = $("question").value.trim();
+  if (!question) return;
+  $("question").value = "";
+  $("send").disabled = true;
+  try { await ask(question); } finally { $("send").disabled = false; $("question").focus(); }
+});
+
+$("question").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    $("form").requestSubmit();
+  }
+});
+
+fetch("/api/prices").then((r) => r.json()).then((p) => { state.prices = p.strong; }).catch(() => {});
+selectTab("ask");
+</script>
+</body>
+</html>

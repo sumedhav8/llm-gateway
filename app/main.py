@@ -1,17 +1,21 @@
-import asyncio
+from pathlib import Path
 import time
 import asyncio
 import logging
+import math
+
 import os
 import time
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from fastapi.responses import FileResponse
 
 from app import cache, config, db, pricing, rag, routing
+from app.limits import limiter
 from app.embeddings import EmbeddingError, embed
 from app.models import ModelError, ask_model
 
@@ -44,6 +48,19 @@ async def lifespan(app):
 
 
 app = FastAPI(title="LLM Gateway", lifespan=lifespan)
+
+
+def rate_limit(request: Request):
+    """Reject a client that sent more than RATE_LIMIT_PER_MINUTE requests in the last minute."""
+    client = request.headers.get("x-client-id") or (request.client.host if request.client else "unknown")
+    wait = limiter.check(client)
+    if wait is not None:
+        seconds = max(1, math.ceil(wait))
+        raise HTTPException(
+            429,
+            f"Too many requests: the limit is {limiter.limit} per minute. Try again in {seconds} s.",
+            headers={"Retry-After": str(seconds)},
+        )
 
 
 # --- What a request and a response look like ----------------------------
@@ -107,8 +124,8 @@ def health():
 
 # Routes whose answer we don't want to reuse: the cheap answer was kept only because
 # the strong model was down, so it may be wrong.
-DONT_CACHE_ROUTES = {"cascade-escalation-failed", "router-unavailable-cascade-escalation-failed"}
-
+DONT_CACHE_ROUTES = {"cascade-escalation-failed", "router-unavailable-cascade-escalation-failed",
+                     "router-strong-failed-cheap"}
 
 async def question_vector(question):
     """The question's embedding, or None if the embedding model can't be reached."""
@@ -214,7 +231,7 @@ async def ask_auto(req: AskRequest):
     )
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", response_model=AskResponse, dependencies=[Depends(rate_limit)])
 async def ask(req: AskRequest):
     if req.tier == "auto":
         return await ask_auto(req)
@@ -282,7 +299,7 @@ class RagResponse(BaseModel):
     sources: list[RagSource]
 
 
-@app.post("/rag/ask", response_model=RagResponse)
+@app.post("/rag/ask", response_model=RagResponse, dependencies=[Depends(rate_limit)])
 async def rag_ask(req: RagRequest):
     """Answer a question about this project from its README and DEVLOG, with citations."""
     start = time.perf_counter()
@@ -312,3 +329,22 @@ async def rag_ask(req: RagRequest):
                            cited=n in result.cited, excerpt=hit.content[:300])
                  for n, hit in enumerate(result.sources, 1)],
     )
+
+# --- Chat page ---------------------------------------------------------------
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", include_in_schema=False)
+def chat_page():
+    """The chat page (app/static/index.html): ask questions in a browser."""
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/api/prices")
+def prices():
+    """The strong model's price per million tokens, so the chat page can estimate 'always Sonnet'."""
+    strong = config.MODELS["strong"]
+    price = pricing.PRICES_PER_MILLION.get(strong.name)
+    return {"strong": {"model": strong.name,
+                       "input": float(price[0]) if price else None,
+                       "output": float(price[1]) if price else None}}
